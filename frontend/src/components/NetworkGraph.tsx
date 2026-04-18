@@ -1,0 +1,281 @@
+import { useEffect, useMemo, useRef } from 'react';
+import * as d3 from 'd3';
+
+import type { EdgeDatum, GraphState, NodeDatum } from '../types';
+
+interface NetworkGraphProps {
+  graph: GraphState | null;
+  selectedNodeId: number | null;
+  highlightedNodeIds: number[];
+  onSelectNode: (nodeId: number) => void;
+}
+
+type SimNode = d3.SimulationNodeDatum & NodeDatum;
+type SimLink = d3.SimulationLinkDatum<SimNode> & EdgeDatum;
+
+function linkKey(link: SimLink): string {
+  const s = typeof link.source === 'number' ? link.source : (link.source as SimNode).id;
+  const t = typeof link.target === 'number' ? link.target : (link.target as SimNode).id;
+  return `${s}-${t}`;
+}
+
+const colorScale = d3.scaleLinear<string>().domain([0, 0.5, 1]).range(['#c8362d', '#858b94', '#1f8a52']);
+
+export function NetworkGraph({ graph, selectedNodeId, highlightedNodeIds, onSelectNode }: NetworkGraphProps) {
+  const svgRef = useRef<SVGSVGElement | null>(null);
+  const highlightedSet = useMemo(() => new Set(highlightedNodeIds), [highlightedNodeIds]);
+
+  // Refs that survive re-renders without triggering effects
+  const simRef = useRef<d3.Simulation<SimNode, SimLink> | null>(null);
+  const nodesRef = useRef<SimNode[]>([]);
+  const nodeSelRef = useRef<d3.Selection<SVGGElement, SimNode, SVGGElement, null> | null>(null);
+
+  // Keep the callback always fresh without adding it to effect deps
+  const onSelectRef = useRef(onSelectNode);
+  onSelectRef.current = onSelectNode;
+
+  // Zoom behavior and last known transform – persisted across steps
+  const zoomRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null);
+  const zoomTransformRef = useRef<d3.ZoomTransform>(d3.zoomIdentity);
+
+  // ── Effect 1: graph topology ────────────────────────────────────────────────
+  // Runs only when the graph data changes (step advance / edge add-remove / reset).
+  // selectedNodeId and highlightedSet are intentionally excluded from the deps.
+  useEffect(() => {
+    if (!graph || !svgRef.current) {
+      return;
+    }
+
+    const width = 920;
+    const height = 520;
+    const svg = d3.select(svgRef.current);
+    svg.attr('viewBox', `0 0 ${width} ${height}`);
+
+    // Preserve existing positions so nodes don't jump on each step
+    const prevById = new Map(nodesRef.current.map((n) => [n.id, n]));
+    const nodes: SimNode[] = graph.nodes.map((node) => {
+      const prev = prevById.get(node.id);
+      return {
+        ...node,
+        x: prev?.x ?? width / 2 + (Math.random() - 0.5) * 100,
+        y: prev?.y ?? height / 2 + (Math.random() - 0.5) * 100,
+      };
+    });
+    nodesRef.current = nodes;
+
+    const links: SimLink[] = graph.edges.map((edge) => ({ ...edge }));
+
+    // ── Degree-based radius ──────────────────────────────────────────────────
+    const degreeMap = new Map<number, number>();
+    for (const edge of graph.edges) {
+      degreeMap.set(edge.source, (degreeMap.get(edge.source) ?? 0) + 1);
+      degreeMap.set(edge.target, (degreeMap.get(edge.target) ?? 0) + 1);
+    }
+    const maxDegree = Math.max(1, ...degreeMap.values());
+    // sqrt scale → area proportional to degree, not radius
+    const radiusScale = d3.scaleSqrt().domain([0, maxDegree]).range([9, 26]);
+    const nodeRadius = (id: number) => radiusScale(degreeMap.get(id) ?? 0);
+
+    const defs = svg.selectAll('defs').data([null]).join('defs');
+    defs
+      .selectAll('#arrowhead')
+      .data(graph.directed ? [null] : [])
+      .join(
+        (enter) =>
+          enter
+            .append('marker')
+            .attr('id', 'arrowhead')
+            .attr('viewBox', '0 -5 10 10')
+            // refX ≈ max node radius + arrow tip length so arrow stops at node edge
+            .attr('refX', 32)
+            .attr('refY', 0)
+            .attr('markerWidth', 6)
+            .attr('markerHeight', 6)
+            .attr('orient', 'auto')
+            .append('path')
+            .attr('fill', '#8b949e')
+            .attr('d', 'M0,-5L10,0L0,5'),
+        (update) => update,
+        (exit) => exit.remove(),
+      );
+
+    const root = svg.selectAll<SVGGElement, null>('g.scene').data([null]).join('g').attr('class', 'scene');
+    const linkLayer = root.selectAll<SVGGElement, null>('g.links').data([null]).join('g').attr('class', 'links');
+    const nodeLayer = root.selectAll<SVGGElement, null>('g.nodes').data([null]).join('g').attr('class', 'nodes');
+
+    // Links – slow fade-in for new edges, fade-out for removed ones
+    const linkSelection = linkLayer
+      .selectAll<SVGLineElement, SimLink>('line')
+      .data(links, linkKey)
+      .join(
+        (enter) =>
+          enter
+            .append('line')
+            .attr('class', 'graph-link')
+            .attr('stroke', '#93a1b1')
+            .attr('stroke-opacity', 0)
+            .attr('stroke-width', 1.4)
+            .attr('marker-end', graph.directed ? 'url(#arrowhead)' : null)
+            .call((selection) => selection.transition().duration(700).attr('stroke-opacity', 0.56)),
+        (update) =>
+          update.call((selection) =>
+            selection
+              .transition()
+              .duration(500)
+              .attr('stroke-opacity', 0.56)
+              .attr('marker-end', graph.directed ? 'url(#arrowhead)' : null),
+          ),
+        (exit) => exit.call((selection) => selection.transition().duration(400).attr('stroke-opacity', 0).remove()),
+      );
+
+    const nodeSelection = nodeLayer
+      .selectAll<SVGGElement, SimNode>('g.node')
+      .data(nodes, (node) => node.id)
+      .join(
+        (enter) => {
+          const group = enter.append('g').attr('class', 'node').style('cursor', 'pointer').attr('opacity', 0);
+          group.append('circle').attr('r', (node) => nodeRadius(node.id)).attr('stroke-width', 2.5);
+          group
+            .append('text')
+            .attr('text-anchor', 'middle')
+            .attr('dy', 4)
+            .attr('class', 'node-label')
+            .text((node) => node.id);
+          group.call((selection) => selection.transition().duration(500).attr('opacity', 1));
+          return group;
+        },
+        (update) => update,
+        (exit) => exit.call((selection) => selection.transition().duration(200).attr('opacity', 0).remove()),
+      )
+      .on('click', (_, node) => onSelectRef.current(node.id));
+
+    // Update fill (state color) and radius; stroke is owned by Effect 2
+    nodeSelection
+      .select('circle')
+      .transition()
+      .duration(600)
+      .attr('r', (node) => nodeRadius(node.id))
+      .attr('fill', (node) => colorScale(node.state));
+
+    nodeSelRef.current = nodeSelection;
+
+    const drag = d3
+      .drag<SVGGElement, SimNode>()
+      .on('start', (event, node) => {
+        if (!event.active) {
+          simRef.current?.alphaTarget(0.12).restart();
+        }
+        node.fx = node.x;
+        node.fy = node.y;
+      })
+      .on('drag', (event, node) => {
+        node.fx = event.x;
+        node.fy = event.y;
+      })
+      .on('end', (event, node) => {
+        if (!event.active) {
+          simRef.current?.alphaTarget(0);
+        }
+        node.fx = null;
+        node.fy = null;
+      });
+
+    nodeSelection.call(drag);
+
+    // Stop the previous simulation before building a new one
+    simRef.current?.stop();
+
+    const simulation = d3
+      .forceSimulation(nodes)
+      .force('link', d3.forceLink<SimNode, SimLink>(links).id((node) => node.id).distance(90).strength(0.22))
+      .force('charge', d3.forceManyBody().strength(-170))
+      // Weak center strength: avoids yanking nodes to the middle
+      .force('center', d3.forceCenter(width / 2, height / 2).strength(0.03))
+      .force('collision', d3.forceCollide((node) => nodeRadius((node as SimNode).id) + 4))
+      // Low alpha + slower decay → gentle drift, not a full re-layout
+      .alpha(0.18)
+      .alphaDecay(0.035);
+
+    simRef.current = simulation;
+
+    // ── Zoom & pan ───────────────────────────────────────────────────────────
+    // Created once; subsequent graph updates re-attach without resetting transform.
+    if (!zoomRef.current) {
+      const zoom = d3
+        .zoom<SVGSVGElement, unknown>()
+        .scaleExtent([0.15, 6])
+        .on('zoom', (event: d3.D3ZoomEvent<SVGSVGElement, unknown>) => {
+          zoomTransformRef.current = event.transform;
+          // Always target the current g.scene, whatever step we are on
+          svg.select<SVGGElement>('g.scene').attr('transform', event.transform.toString());
+        });
+      zoomRef.current = zoom;
+      svg.call(zoom);
+      // Double-click on empty SVG background resets zoom
+      svg.on('dblclick.zoom', () => {
+        svg.transition().duration(500).call(zoom.transform, d3.zoomIdentity);
+      });
+    } else {
+      // Re-attach (idempotent) and restore the saved camera position
+      svg.call(zoomRef.current);
+      svg.call(zoomRef.current.transform, zoomTransformRef.current);
+    }
+    // On a full reset (step 0) snap back to identity
+    if (graph.step === 0) {
+      zoomTransformRef.current = d3.zoomIdentity;
+      svg.call(zoomRef.current.transform, d3.zoomIdentity);
+    }
+
+    simulation.on('tick', () => {
+      linkSelection
+        .attr('x1', (link) => (link.source as SimNode).x ?? 0)
+        .attr('y1', (link) => (link.source as SimNode).y ?? 0)
+        .attr('x2', (link) => (link.target as SimNode).x ?? 0)
+        .attr('y2', (link) => (link.target as SimNode).y ?? 0);
+
+      // nodeSelRef always points at the latest selection, so the tick stays valid
+      nodeSelRef.current?.attr('transform', (node) => `translate(${node.x ?? 0}, ${node.y ?? 0})`);
+    });
+
+    return () => {
+      simulation.stop();
+    };
+  }, [graph]); // ← graph only; selection state never triggers a layout reset
+
+  // ── Effect 2: selection + highlight ────────────────────────────────────────
+  // Only updates stroke/glow style. The simulation is never touched here.
+  useEffect(() => {
+    nodeSelRef.current
+      ?.select('circle')
+      .transition()
+      .duration(200)
+      .attr('stroke', (node) => {
+        if (selectedNodeId === node.id) return '#f3f6f8';
+        if (highlightedSet.has(node.id)) return '#ffce73';
+        return '#17212b';
+      })
+      .attr('stroke-width', (node) =>
+        selectedNodeId === node.id || highlightedSet.has(node.id) ? 4 : 2.5,
+      )
+      .attr('filter', (node) =>
+        highlightedSet.has(node.id) ? 'drop-shadow(0 0 12px rgba(255, 206, 115, 0.65))' : null,
+      );
+  }, [selectedNodeId, highlightedSet]);
+
+  return (
+    <section className="card graph-panel">
+      <div className="panel-heading">
+        <div>
+          <p className="eyebrow">Network</p>
+          <h2>Propagation Map</h2>
+        </div>
+        <div className="legend-inline">
+          <span><i className="legend-dot misinformation" /> Misinformation</span>
+          <span><i className="legend-dot neutral" /> Neutral</span>
+          <span><i className="legend-dot fact" /> Fact-checking</span>
+        </div>
+      </div>
+      <svg ref={svgRef} className="graph-svg" role="img" aria-label="Simulation network graph" />
+    </section>
+  );
+}
