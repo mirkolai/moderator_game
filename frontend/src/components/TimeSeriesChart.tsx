@@ -8,9 +8,9 @@ interface TimeSeriesChartProps {
 }
 
 const seriesConfig = [
-  { key: 'misinformation', label: 'Misinformation', color: '#c8362d' },
-  { key: 'neutral', label: 'Neutral', color: '#858b94' },
-  { key: 'fact_checking', label: 'Fact-checking', color: '#1f8a52' },
+  { key: 'misinformation', label: 'Misinformation', color: '#f1a340' },
+  { key: 'neutral', label: 'Neutral', color: '#f7f7f7' },
+  { key: 'fact_checking', label: 'Fact-checking', color: '#998ec3' },
 ] as const;
 
 export function TimeSeriesChart({ data }: TimeSeriesChartProps) {

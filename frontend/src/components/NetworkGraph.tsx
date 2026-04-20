@@ -19,7 +19,7 @@ function linkKey(link: SimLink): string {
   return `${s}-${t}`;
 }
 
-const colorScale = d3.scaleLinear<string>().domain([0, 0.5, 1]).range(['#c8362d', '#858b94', '#1f8a52']);
+const colorScale = d3.scaleLinear<string>().domain([0, 0.5, 1]).range(['#f1a340', '#f7f7f7', '#998ec3']);
 
 export function NetworkGraph({ graph, selectedNodeId, highlightedNodeIds, onSelectNode }: NetworkGraphProps) {
   const svgRef = useRef<SVGSVGElement | null>(null);
