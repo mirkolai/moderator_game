@@ -1,4 +1,4 @@
-export type Classification = 'misinformation' | 'fact-checking' | 'neutral';
+export type Classification = 'dictatorship' | 'democracy' | 'neutral';
 export type PostType = Classification;
 export type PostStatus = 'active' | 'censored';
 export type Outcome = 'running' | 'won' | 'lost';
@@ -44,8 +44,8 @@ export interface InfluenceResponse {
 
 export interface TimeSeriesPoint {
   step: number;
-  misinformation: number;
-  fact_checking: number;
+  dictatorship: number;
+  democracy: number;
   neutral: number;
 }
 
@@ -59,31 +59,35 @@ export interface StatusResponse {
   outcome: Outcome;
   message: string;
   percentages: {
-    misinformation: number;
-    'fact-checking': number;
+    dictatorship: number;
+    'democracy': number;
     neutral: number;
   };
   censorship_actions_remaining: number;
 }
 
 export interface SimulationParameters {
+  mission_role: 'well_informed_citizen' | 'bad_actor';
   number_of_nodes: number;
   graph_type: 'random';
   directed: boolean;
   p_generate_base: number;
   weight_state_influence_on_post_type: number;
-  bias_misinformation: number;
-  bias_factchecking: number;
+  bias_dictatorship: number;
+  bias_democracy: number;
   bias_neutral: number;
   p_repost_base: number;
-  p_repost_misinformation: number;
-  p_repost_factchecking: number;
+  p_repost_dictatorship: number;
+  p_repost_democracy: number;
   p_repost_neutral: number;
   influence_strength: number;
   p_add_edge: number;
+  edge_addition_dictatorship_threshold: number;
+  edge_addition_democracy_threshold: number;
   p_remove_edge: number;
+  edge_removal_opinion_threshold: number;
   max_censorship_actions_per_step: number;
-  N_steps: number;
+  election_step: number;
   win_threshold: number;
   neutrality_tolerance: number;
 }
@@ -93,4 +97,12 @@ export interface SnapshotResponse {
   status: StatusResponse;
   time_series: TimeSeriesResponse;
   parameters: SimulationParameters;
+}
+
+export interface AppNotification {
+  id: string;
+  message: string;
+  step: number;
+  read: boolean;
+  timestamp: number;
 }

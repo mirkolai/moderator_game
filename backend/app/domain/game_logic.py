@@ -8,15 +8,15 @@ class GameLogic:
     @staticmethod
     def classify_state(value: float, tolerance: float) -> str:
         if value <= 0.5 - tolerance:
-            return "misinformation"
+            return "dictatorship"
         if value >= 0.5 + tolerance:
-            return "fact-checking"
+            return "democracy"
         return "neutral"
 
     @classmethod
     def percentages(cls, node_states: list[float], tolerance: float) -> dict[str, float]:
         total = len(node_states) or 1
-        counts = {"misinformation": 0, "fact-checking": 0, "neutral": 0}
+        counts = {"dictatorship": 0, "democracy": 0, "neutral": 0}
         for state in node_states:
             counts[cls.classify_state(state, tolerance)] += 1
         return {key: value / total for key, value in counts.items()}
@@ -26,20 +26,51 @@ class GameLogic:
         percentages = cls.percentages(node_states, tolerance)
         return TimeSeriesPoint(
             step=step,
-            misinformation=percentages["misinformation"],
-            fact_checking=percentages["fact-checking"],
+            dictatorship=percentages["dictatorship"],
+            democracy=percentages["democracy"],
             neutral=percentages["neutral"],
         )
 
     @classmethod
     def evaluate(cls, step: int, node_states: list[float], params: SimulationParameters) -> tuple[Outcome, str]:
         percentages = cls.percentages(node_states, params.neutrality_tolerance)
-        if percentages["misinformation"] >= params.win_threshold:
-            return Outcome.LOST, "Misinformation reached the loss threshold."
-        if percentages["fact-checking"] >= params.win_threshold:
-            return Outcome.WON, "Fact-checking reached the win threshold."
-        if step >= params.N_steps:
-            if percentages["fact-checking"] > percentages["misinformation"]:
-                return Outcome.WON, "The moderation window ended with a fact-checking majority."
-            return Outcome.LOST, "The moderation window ended without a fact-checking majority."
-        return Outcome.RUNNING, "Simulation in progress."
+        democracy = percentages["democracy"]
+        dictatorship = percentages["dictatorship"]
+
+        # Super-majority can end the game immediately, even before election day.
+        if params.mission_role == "well_informed_citizen":
+            if democracy >= params.win_threshold:
+                return Outcome.WON, "Democracy reached the super-majority threshold."
+            if dictatorship >= params.win_threshold:
+                return Outcome.LOST, "Dictatorship reached the super-majority threshold."
+        else:
+            if dictatorship >= params.win_threshold:
+                return Outcome.WON, "Dictatorship reached the super-majority threshold."
+            if democracy >= params.win_threshold:
+                return Outcome.LOST, "Democracy reached the super-majority threshold."
+
+        if step >= params.election_step:
+            democracy_super_majority = democracy >= params.win_threshold
+            dictatorship_super_majority = dictatorship >= params.win_threshold
+            democracy_majority = democracy > dictatorship
+            dictatorship_majority = dictatorship > democracy
+
+            if params.mission_role == "well_informed_citizen":
+                if democracy_super_majority:
+                    return Outcome.WON, "Election day: democracy reached a super-majority."
+                if democracy_majority:
+                    return Outcome.WON, "Election day: democracy won the majority vote."
+                if dictatorship_super_majority:
+                    return Outcome.LOST, "Election day: dictatorship reached a super-majority."
+                return Outcome.LOST, "Election day: democracy did not secure the majority."
+
+            if dictatorship_super_majority:
+                return Outcome.WON, "Election day: dictatorship reached a super-majority."
+            if dictatorship_majority:
+                return Outcome.WON, "Election day: dictatorship won the majority vote."
+            if democracy_super_majority:
+                return Outcome.LOST, "Election day: democracy reached a super-majority."
+            return Outcome.LOST, "Election day: dictatorship did not secure the majority."
+
+        steps_left = max(0, params.election_step - step)
+        return Outcome.RUNNING, f"Campaign in progress. {steps_left} day(s) until election."

@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef } from 'react';
 import * as d3 from 'd3';
 
-import type { EdgeDatum, GraphState, NodeDatum } from '../types';
+import type { EdgeDatum, GraphState, NodeDatum, SimulationParameters } from '../types';
 
 interface NetworkGraphProps {
   graph: GraphState | null;
+  parameters: SimulationParameters | null;
   selectedNodeId: number | null;
   highlightedNodeIds: number[];
   onSelectNode: (nodeId: number) => void;
@@ -13,22 +14,54 @@ interface NetworkGraphProps {
 type SimNode = d3.SimulationNodeDatum & NodeDatum;
 type SimLink = d3.SimulationLinkDatum<SimNode> & EdgeDatum;
 
-function linkKey(link: SimLink): string {
-  const s = typeof link.source === 'number' ? link.source : (link.source as SimNode).id;
-  const t = typeof link.target === 'number' ? link.target : (link.target as SimNode).id;
-  return `${s}-${t}`;
+type EdgeChange = 'normal' | 'new' | 'removed';
+
+interface RenderLinkDatum {
+  key: string;
+  sourceId: number;
+  targetId: number;
+  change: EdgeChange;
 }
 
-const colorScale = d3.scaleLinear<string>().domain([0, 0.5, 1]).range(['#f1a340', '#f7f7f7', '#998ec3']);
-
-export function NetworkGraph({ graph, selectedNodeId, highlightedNodeIds, onSelectNode }: NetworkGraphProps) {
+function edgeKey(source: number, target: number): string {
+  return `${source}-${target}`;
+}
+export function NetworkGraph({ graph, parameters, selectedNodeId, highlightedNodeIds, onSelectNode }: NetworkGraphProps) {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const highlightedSet = useMemo(() => new Set(highlightedNodeIds), [highlightedNodeIds]);
+
+  // Dynamic color scale based on neutrality tolerance parameter
+  const colorScale = useMemo(() => {
+    if (!parameters) {
+      // Fallback to linear scale if no parameters yet
+      return d3.scaleLinear<string>().domain([0, 0.5, 1]).range(['#f1a340', '#f7f7f7', '#998ec3']);
+    }
+    // Threshold scale: nodes at extremes get strong colors, neutral band gets neutral color
+    const scale = (d3.scaleThreshold() as any)
+      .domain([0.5 - parameters.neutrality_tolerance, 0.5 + parameters.neutrality_tolerance])
+      .range(['#f1a340', '#f7f7f7', '#998ec3']);
+    return scale as d3.ScaleLinear<number, string>;
+  }, [parameters]);
+
+  // Compute neighbors of selected node for visibility control
+  const selectedNodeNeighbors = useMemo(() => {
+    if (!selectedNodeId || !graph) return new Set<number>();
+    const neighbors = new Set<number>();
+    neighbors.add(selectedNodeId); // Include the node itself
+    for (const edge of graph.edges) {
+      if (edge.source === selectedNodeId) neighbors.add(edge.target);
+      if (edge.target === selectedNodeId) neighbors.add(edge.source);
+    }
+    return neighbors;
+  }, [selectedNodeId, graph]);
 
   // Refs that survive re-renders without triggering effects
   const simRef = useRef<d3.Simulation<SimNode, SimLink> | null>(null);
   const nodesRef = useRef<SimNode[]>([]);
   const nodeSelRef = useRef<d3.Selection<SVGGElement, SimNode, SVGGElement, null> | null>(null);
+  const prevStepRef = useRef<number | null>(null);
+  const prevEdgesRef = useRef<Map<string, EdgeDatum>>(new Map());
+  const removedForStepRef = useRef<Map<string, EdgeDatum>>(new Map());
 
   // Keep the callback always fresh without adding it to effect deps
   const onSelectRef = useRef(onSelectNode);
@@ -64,6 +97,48 @@ export function NetworkGraph({ graph, selectedNodeId, highlightedNodeIds, onSele
     nodesRef.current = nodes;
 
     const links: SimLink[] = graph.edges.map((edge) => ({ ...edge }));
+
+    let newEdgeKeys = new Set<string>();
+    let removedThisStep = removedForStepRef.current;
+    const currentEdgesByKey = new Map(graph.edges.map((edge) => [edgeKey(edge.source, edge.target), edge]));
+
+    // Compute edge diff only when the simulation moves forward.
+    // On reset (step goes back to 0 or decreases), clear transient edge styles.
+    if (prevStepRef.current !== null && graph.step !== prevStepRef.current) {
+      const isReset = graph.step === 0 || graph.step < prevStepRef.current;
+      if (isReset) {
+        newEdgeKeys = new Set();
+        removedThisStep = new Map();
+        removedForStepRef.current = removedThisStep;
+      } else {
+        newEdgeKeys = new Set(
+          [...currentEdgesByKey.keys()].filter((key) => !prevEdgesRef.current.has(key)),
+        );
+        removedThisStep = new Map(
+          [...prevEdgesRef.current.entries()].filter(([key]) => !currentEdgesByKey.has(key)),
+        );
+        removedForStepRef.current = removedThisStep;
+      }
+    }
+
+    const renderLinks: RenderLinkDatum[] = [
+      ...graph.edges.map((edge) => {
+        const key = edgeKey(edge.source, edge.target);
+        const change: EdgeChange = newEdgeKeys.has(key) ? 'new' : 'normal';
+        return {
+          key,
+          sourceId: edge.source,
+          targetId: edge.target,
+          change,
+        };
+      }),
+      ...[...removedThisStep.entries()].map(([key, edge]) => ({
+        key,
+        sourceId: edge.source,
+        targetId: edge.target,
+        change: 'removed' as const,
+      })),
+    ];
 
     // ── Degree-based radius ──────────────────────────────────────────────────
     const degreeMap = new Map<number, number>();
@@ -103,27 +178,50 @@ export function NetworkGraph({ graph, selectedNodeId, highlightedNodeIds, onSele
     const linkLayer = root.selectAll<SVGGElement, null>('g.links').data([null]).join('g').attr('class', 'links');
     const nodeLayer = root.selectAll<SVGGElement, null>('g.nodes').data([null]).join('g').attr('class', 'nodes');
 
+    // Click on empty SVG area to deselect
+    svg.on('click', (event: MouseEvent) => {
+      // Only deselect if clicking on the SVG background, not on nodes/elements
+      if (event.target === svgRef.current) {
+        onSelectRef.current(null as any);
+      }
+    });
+
     // Links – slow fade-in for new edges, fade-out for removed ones
     const linkSelection = linkLayer
-      .selectAll<SVGLineElement, SimLink>('line')
-      .data(links, linkKey)
+      .selectAll<SVGLineElement, RenderLinkDatum>('line')
+      .data(renderLinks, (link) => link.key)
       .join(
         (enter) =>
           enter
             .append('line')
             .attr('class', 'graph-link')
-            .attr('stroke', '#93a1b1')
+            .attr('stroke', (link) => (link.change === 'removed' ? '#ff9a8f' : link.change === 'new' ? '#ffd166' : '#93a1b1'))
             .attr('stroke-opacity', 0)
-            .attr('stroke-width', 1.4)
-            .attr('marker-end', graph.directed ? 'url(#arrowhead)' : null)
-            .call((selection) => selection.transition().duration(700).attr('stroke-opacity', 0.56)),
+            .attr('stroke-width', (link) => (link.change === 'new' ? 3.2 : link.change === 'removed' ? 2.6 : 1.4))
+            .attr('stroke-dasharray', (link) => (link.change === 'removed' ? '8 6' : null))
+            .attr('marker-end', (link) =>
+              graph.directed && link.change !== 'removed' ? 'url(#arrowhead)' : null,
+            )
+            .call((selection) =>
+              selection
+                .transition()
+                .duration(700)
+                .attr('stroke-opacity', (link) => (link.change === 'new' ? 0.9 : link.change === 'removed' ? 0.78 : 0.56)),
+            ),
         (update) =>
           update.call((selection) =>
             selection
               .transition()
               .duration(500)
-              .attr('stroke-opacity', 0.56)
-              .attr('marker-end', graph.directed ? 'url(#arrowhead)' : null),
+              .attr('stroke', (link) =>
+                link.change === 'removed' ? '#ff9a8f' : link.change === 'new' ? '#ffd166' : '#93a1b1',
+              )
+              .attr('stroke-width', (link) => (link.change === 'new' ? 3.2 : link.change === 'removed' ? 2.6 : 1.4))
+              .attr('stroke-dasharray', (link) => (link.change === 'removed' ? '8 6' : null))
+              .attr('stroke-opacity', (link) => (link.change === 'new' ? 0.9 : link.change === 'removed' ? 0.78 : 0.56))
+              .attr('marker-end', (link) =>
+                graph.directed && link.change !== 'removed' ? 'url(#arrowhead)' : null,
+              ),
           ),
         (exit) => exit.call((selection) => selection.transition().duration(400).attr('stroke-opacity', 0).remove()),
       );
@@ -147,7 +245,14 @@ export function NetworkGraph({ graph, selectedNodeId, highlightedNodeIds, onSele
         (update) => update,
         (exit) => exit.call((selection) => selection.transition().duration(200).attr('opacity', 0).remove()),
       )
-      .on('click', (_, node) => onSelectRef.current(node.id));
+      .on('click', (_, node) => {
+        // Toggle selection: if already selected, deselect
+        if (selectedNodeId === node.id) {
+          onSelectRef.current(null as any);
+        } else {
+          onSelectRef.current(node.id);
+        }
+      });
 
     // Update fill (state color) and radius; stroke is owned by Effect 2
     nodeSelection
@@ -227,15 +332,20 @@ export function NetworkGraph({ graph, selectedNodeId, highlightedNodeIds, onSele
     }
 
     simulation.on('tick', () => {
+      const nodeById = new Map(nodes.map((node) => [node.id, node]));
+
       linkSelection
-        .attr('x1', (link) => (link.source as SimNode).x ?? 0)
-        .attr('y1', (link) => (link.source as SimNode).y ?? 0)
-        .attr('x2', (link) => (link.target as SimNode).x ?? 0)
-        .attr('y2', (link) => (link.target as SimNode).y ?? 0);
+        .attr('x1', (link) => nodeById.get(link.sourceId)?.x ?? 0)
+        .attr('y1', (link) => nodeById.get(link.sourceId)?.y ?? 0)
+        .attr('x2', (link) => nodeById.get(link.targetId)?.x ?? 0)
+        .attr('y2', (link) => nodeById.get(link.targetId)?.y ?? 0);
 
       // nodeSelRef always points at the latest selection, so the tick stays valid
       nodeSelRef.current?.attr('transform', (node) => `translate(${node.x ?? 0}, ${node.y ?? 0})`);
     });
+
+    prevStepRef.current = graph.step;
+    prevEdgesRef.current = currentEdgesByKey;
 
     return () => {
       simulation.stop();
@@ -243,8 +353,22 @@ export function NetworkGraph({ graph, selectedNodeId, highlightedNodeIds, onSele
   }, [graph]); // ← graph only; selection state never triggers a layout reset
 
   // ── Effect 2: selection + highlight ────────────────────────────────────────
-  // Only updates stroke/glow style. The simulation is never touched here.
+  // Only updates stroke/glow style and opacity. The simulation is never touched here.
   useEffect(() => {
+    nodeSelRef.current?.attr('opacity', (node) => {
+      // If a node is selected and this node is not a neighbor, dim it
+      if (selectedNodeId !== null && !selectedNodeNeighbors.has(node.id)) {
+        return 0.25;
+      }
+      return 1;
+    });
+
+    // Update fill color immediately (no transition) to ensure colors are always correct
+    nodeSelRef.current
+      ?.select('circle')
+      .attr('fill', (node) => colorScale(node.state));
+
+    // Update stroke and other visual properties with transition
     nodeSelRef.current
       ?.select('circle')
       .transition()
@@ -260,19 +384,19 @@ export function NetworkGraph({ graph, selectedNodeId, highlightedNodeIds, onSele
       .attr('filter', (node) =>
         highlightedSet.has(node.id) ? 'drop-shadow(0 0 12px rgba(255, 206, 115, 0.65))' : null,
       );
-  }, [selectedNodeId, highlightedSet]);
+  }, [selectedNodeId, highlightedSet, selectedNodeNeighbors, colorScale]);
 
   return (
     <section className="card graph-panel">
       <div className="panel-heading">
         <div>
           <p className="eyebrow">Network</p>
-          <h2>Propagation Map</h2>
+          <h2>Opinion Propagation Map</h2>
         </div>
         <div className="legend-inline">
-          <span><i className="legend-dot misinformation" /> Misinformation</span>
+          <span><i className="legend-dot dictatorship" /> Dictatorship leaning</span>
           <span><i className="legend-dot neutral" /> Neutral</span>
-          <span><i className="legend-dot fact" /> Fact-checking</span>
+          <span><i className="legend-dot democracy" /> Democracy leaning</span>
         </div>
       </div>
       <svg ref={svgRef} className="graph-svg" role="img" aria-label="Simulation network graph" />

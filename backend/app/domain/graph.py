@@ -68,8 +68,63 @@ class GraphManager:
         self.add_edge(source, target)
         return source, target
 
+    def add_convergent_edge(
+        self,
+        node_states: list[float],
+        dictatorship_threshold: float,
+        democracy_threshold: float,
+        rng: random.Random,
+    ) -> tuple[int, int] | None:
+        """Add a random edge between two unconnected nodes that share the same opinion cluster.
+
+        A pair qualifies when both nodes are dictatorship-leaning
+        (state <= dictatorship_threshold) or both are democracy-leaning
+        (state >= democracy_threshold).  Returns None if no qualifying pair exists.
+        """
+        candidates: list[tuple[int, int]] = []
+        for source in range(self.number_of_nodes):
+            for target in range(self.number_of_nodes):
+                if source == target:
+                    continue
+                if not self.directed and target <= source:
+                    continue
+                if target in self.adjacency[source]:
+                    continue
+                s_state = node_states[source]
+                t_state = node_states[target]
+                both_dictatorship = s_state <= dictatorship_threshold and t_state <= dictatorship_threshold
+                both_democracy = s_state >= democracy_threshold and t_state >= democracy_threshold
+                if both_dictatorship or both_democracy:
+                    candidates.append((source, target))
+        if not candidates:
+            return None
+        source, target = rng.choice(candidates)
+        self.add_edge(source, target)
+        return source, target
+
     def remove_random_edge(self, rng: random.Random) -> tuple[int, int] | None:
         candidates = self.edges()
+        if not candidates:
+            return None
+        source, target = rng.choice(candidates)
+        self.remove_edge(source, target)
+        return source, target
+
+    def remove_discordant_edge(
+        self,
+        node_states: list[float],
+        threshold: float,
+        rng: random.Random,
+    ) -> tuple[int, int] | None:
+        """Remove a random edge whose endpoints differ in opinion by at least *threshold*.
+
+        Returns None (and leaves the graph unchanged) if no such edge exists.
+        """
+        candidates = [
+            (source, target)
+            for source, target in self.edges()
+            if abs(node_states[source] - node_states[target]) >= threshold
+        ]
         if not candidates:
             return None
         source, target = rng.choice(candidates)

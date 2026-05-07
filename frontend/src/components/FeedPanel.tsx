@@ -6,14 +6,15 @@ interface FeedPanelProps {
   feed: FeedResponse | null;
   selectedNodeId: number | null;
   highlightedPostId: string | null;
+  currentStep: number;
   censorshipActionsRemaining: number;
   onHighlightPost: (post: PostRecord) => void;
   onCensorPost: (postId: string) => void;
 }
 
 const typeLabel = {
-  misinformation: 'Misinformation',
-  'fact-checking': 'Fact-checking',
+  dictatorship: 'Dictatorship propaganda',
+  'democracy': 'Democracy support',
   neutral: 'Neutral',
 };
 
@@ -21,6 +22,7 @@ export function FeedPanel({
   feed,
   selectedNodeId,
   highlightedPostId,
+  currentStep,
   censorshipActionsRemaining,
   onHighlightPost,
   onCensorPost,
@@ -30,9 +32,9 @@ export function FeedPanel({
       <div className="panel-heading">
         <div>
           <p className="eyebrow">Feed</p>
-          <h2>Node {selectedNodeId ?? '...'}</h2>
+          <h2>Citizen {selectedNodeId ?? '...'}</h2>
         </div>
-        <div className="counter-pill">Censors left: {censorshipActionsRemaining}</div>
+        <div className="counter-pill">Moderations left: {censorshipActionsRemaining}</div>
       </div>
 
       {feed === null ? (
@@ -44,6 +46,8 @@ export function FeedPanel({
           {feed.posts.map((post) => {
             const isCensored = post.status === 'censored';
             const isActiveHighlight = highlightedPostId === post.id;
+            const elapsedDays = Math.max(0, (currentStep - post.creation_step)-1);
+            const postedLabel = elapsedDays === 0 ? 'Posted today' : elapsedDays === 1? 'Posted 1 day ago': `Posted ${elapsedDays} days ago`;
             return (
               <article
                 key={post.id}
@@ -52,7 +56,7 @@ export function FeedPanel({
               >
                 <div className="post-card__header">
                   <span className="type-chip">{typeLabel[post.type]}</span>
-                  <span className="meta-chip">Step {post.creation_step}</span>
+                  <span className="meta-chip">{postedLabel}</span>
                 </div>
                 <div className="post-card__body">
                   <p>Origin node: {post.creator_node}</p>
@@ -69,7 +73,7 @@ export function FeedPanel({
                       onCensorPost(post.id);
                     }}
                   >
-                    {isCensored ? 'Censored' : 'Censor'}
+                    {isCensored ? 'Moderated' : 'Moderate'}
                   </button>
                   <span className="status-label">{isCensored ? 'Propagation halted' : 'Active'}</span>
                 </div>

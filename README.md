@@ -1,6 +1,6 @@
 # Moderator Game
 
-A modular simulation game about misinformation spread in a dynamic social network. The backend runs a synchronous graph simulation in FastAPI, and the frontend renders the network and time-series views with React and D3.
+A modular simulation game about dictatorship spread in a dynamic social network. The backend runs a synchronous graph simulation in FastAPI, and the frontend renders the network and time-series views with React and D3.
 
 ## Structure
 
@@ -73,4 +73,6 @@ npm run dev        # dev server at http://localhost:5173
 - Censored posts remain visible but can no longer propagate or be reposted
 - Reposting probability uses a sigmoid to keep outcomes stable
 - Network evolution can add or remove edges each step
-- Win and loss thresholds are configurable through the parameter panel
+- Mission role is configurable: `well_informed_citizen` or `bad_actor`
+- Election day is configurable with `election_step` (default 20, range 15-30)
+- On election day, super-majority (`win_threshold`) or simple majority decides the game outcome

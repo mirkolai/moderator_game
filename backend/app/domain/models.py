@@ -5,8 +5,8 @@ from enum import Enum
 
 
 class PostType(str, Enum):
-    MISINFORMATION = "misinformation"
-    FACT_CHECKING = "fact-checking"
+    dictatorship = "dictatorship"
+    democracy = "democracy"
     NEUTRAL = "neutral"
 
 
@@ -37,8 +37,8 @@ class PostRecord:
 @dataclass(slots=True)
 class TimeSeriesPoint:
     step: int
-    misinformation: float
-    fact_checking: float
+    dictatorship: float
+    democracy: float
     neutral: float
 
 

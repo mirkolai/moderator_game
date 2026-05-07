@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { api } from '../api/client';
 import type {
+  AppNotification,
   FeedResponse,
   GraphState,
   PostRecord,
@@ -31,6 +32,29 @@ export function useSimulation() {
   const [highlightedPostId, setHighlightedPostId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const selectedNodeIdRef = useRef<number | null>(null);
+  const firstPostNotifiedRef = useRef(false);
+  const firstEdgeRemovedNotifiedRef = useRef(false);
+  const firstEdgeAddedNotifiedRef = useRef(false);
+  const prevEdgeKeysRef = useRef<Set<string>>(new Set());
+
+  const addNotification = (message: string, step: number) => {
+    setNotifications((prev) => [
+      {
+        id: `${Date.now()}-${Math.random()}`,
+        message,
+        step,
+        read: false,
+        timestamp: Date.now(),
+      },
+      ...prev,
+    ]);
+  };
+
+  const markAllRead = () => {
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+  };
 
   const refreshSelectedFeed = async (nodeId: number | null) => {
     if (nodeId === null) {
@@ -41,7 +65,10 @@ export function useSimulation() {
     setFeed(nextFeed);
   };
 
-  const hydrate = async (loader: () => Promise<SnapshotResponse>) => {
+  const hydrate = async (
+    loader: () => Promise<SnapshotResponse>,
+    feedNodeId: number | null = selectedNodeIdRef.current,
+  ): Promise<SnapshotResponse | null> => {
     setLoading(true);
     setError(null);
     try {
@@ -51,21 +78,38 @@ export function useSimulation() {
       setStatus(next.status);
       setParameters(next.parameters);
       setTimeSeries(next.timeSeries);
-      if (selectedNodeId !== null) {
-        await refreshSelectedFeed(selectedNodeId);
+      if (feedNodeId !== null) {
+        await refreshSelectedFeed(feedNodeId);
       }
+      return snapshot;
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : 'Unknown error');
+      return null;
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    void hydrate(api.startSimulation);
+    void (async () => {
+      await hydrate(api.startSimulation);
+      addNotification(
+        'Each node is a citizen in the online community. Your mission changes with the selected role: defend democracy as a well-informed citizen, or push dictatorship as a bad actor. Click "Advance Day" to start the campaign.',
+        0,
+      );
+    })();
   }, []);
 
-  const selectNode = async (nodeId: number) => {
+  const selectNode = async (nodeId: number | null) => {
+    if (nodeId === null) {
+      selectedNodeIdRef.current = null;
+      setSelectedNodeId(null);
+      setFeed(null);
+      setHighlightedNodeIds([]);
+      setHighlightedPostId(null);
+      return;
+    }
+    selectedNodeIdRef.current = nodeId;
     setSelectedNodeId(nodeId);
     setHighlightedNodeIds([]);
     setHighlightedPostId(null);
@@ -102,28 +146,71 @@ export function useSimulation() {
         await refreshSelectedFeed(selectedNodeId);
       }
     } catch (caughtError) {
-      setError(caughtError instanceof Error ? caughtError.message : 'Failed to censor post');
+      setError(caughtError instanceof Error ? caughtError.message : 'Failed to moderate post');
     }
   };
 
   const stepSimulation = async () => {
-    await hydrate(api.stepSimulation);
+    const prevKeys = prevEdgeKeysRef.current;
+    const snapshot = await hydrate(api.stepSimulation);
+    if (!snapshot) return;
+
+    const currentStep = snapshot.status.current_step;
+    const currentKeys = new Set(snapshot.graph.edges.map((e) => `${e.source}-${e.target}`));
+    prevEdgeKeysRef.current = currentKeys;
+
+    if (!firstPostNotifiedRef.current && currentStep >= 1) {
+      firstPostNotifiedRef.current = true;
+      addNotification(
+        'Citizens have started publishing content. Click a node to inspect its feed, then click a post to highlight influenced users. Use moderation actions carefully: every intervention can change election momentum.',
+        currentStep,
+      );
+    }
+
+    if (!firstEdgeRemovedNotifiedRef.current && prevKeys.size > 0) {
+      const hasRemoval = [...prevKeys].some((key) => !currentKeys.has(key));
+      if (hasRemoval) {
+        firstEdgeRemovedNotifiedRef.current = true;
+        addNotification(
+          'Some citizens are drifting apart ideologically. When opinions diverge enough, social ties can break and dashed links mark those disrupted relationships.',
+          currentStep,
+        );
+      }
+    }
+
+    if (!firstEdgeAddedNotifiedRef.current && prevKeys.size > 0) {
+      const hasAddition = [...currentKeys].some((key) => !prevKeys.has(key));
+      if (hasAddition) {
+        firstEdgeAddedNotifiedRef.current = true;
+        addNotification(
+          'Opinion convergence can also create new ties. Bold links indicate new relationships that can amplify either democratic or authoritarian narratives.',
+          currentStep,
+        );
+      }
+    }
   };
 
   const resetSimulation = async () => {
+    selectedNodeIdRef.current = null;
     setSelectedNodeId(null);
     setFeed(null);
     setHighlightedNodeIds([]);
     setHighlightedPostId(null);
-    await hydrate(api.resetSimulation);
+    setNotifications([]);
+    firstPostNotifiedRef.current = false;
+    firstEdgeRemovedNotifiedRef.current = false;
+    firstEdgeAddedNotifiedRef.current = false;
+    prevEdgeKeysRef.current = new Set();
+    await hydrate(api.resetSimulation, null);
   };
 
   const updateParameters = async (nextParameters: SimulationParameters) => {
+    selectedNodeIdRef.current = null;
     setSelectedNodeId(null);
     setFeed(null);
     setHighlightedNodeIds([]);
     setHighlightedPostId(null);
-    await hydrate(() => api.updateParameters(nextParameters));
+    await hydrate(() => api.updateParameters(nextParameters), null);
   };
 
   return {
@@ -137,6 +224,9 @@ export function useSimulation() {
     highlightedPostId,
     loading,
     error,
+    notifications,
+    addNotification,
+    markAllRead,
     selectNode,
     highlightInfluence,
     censorPost,

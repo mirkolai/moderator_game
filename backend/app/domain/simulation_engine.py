@@ -60,12 +60,12 @@ class SimulationEngine:
 
     def _choose_post_type(self, state: float) -> PostType:
         weight = self.params.weight_state_influence_on_post_type
-        misinformation_score = self.params.bias_misinformation + weight * (1.0 - state)
-        fact_checking_score = self.params.bias_factchecking + weight * state
+        dictatorship_score = self.params.bias_dictatorship + weight * (1.0 - state)
+        democracy_score = self.params.bias_democracy + weight * state
         neutral_score = self.params.bias_neutral + weight * max(0.0, 1.0 - abs(state - 0.5) * 2.0)
         options = [
-            (PostType.MISINFORMATION, misinformation_score),
-            (PostType.FACT_CHECKING, fact_checking_score),
+            (PostType.dictatorship, dictatorship_score),
+            (PostType.democracy, democracy_score),
             (PostType.NEUTRAL, neutral_score),
         ]
         total = sum(score for _, score in options)
@@ -78,24 +78,24 @@ class SimulationEngine:
         return PostType.NEUTRAL
 
     def _type_influence(self, node_id: int, post_type: PostType) -> float:
-        if post_type == PostType.MISINFORMATION:
+        if post_type == PostType.dictatorship:
             return -self.params.influence_strength
-        if post_type == PostType.FACT_CHECKING:
+        if post_type == PostType.democracy:
             return self.params.influence_strength
         return (0.5 - self.node_states[node_id]) * self.params.influence_strength * 0.45
 
     def _alignment_factor(self, state: float, post_type: PostType) -> float:
-        if post_type == PostType.MISINFORMATION:
+        if post_type == PostType.dictatorship:
             return 1.5 - state
-        if post_type == PostType.FACT_CHECKING:
+        if post_type == PostType.democracy:
             return 0.5 + state
         return 1.0 - abs(state - 0.5)
 
     def _type_modifier(self, post_type: PostType) -> float:
-        if post_type == PostType.MISINFORMATION:
-            return self.params.p_repost_misinformation
-        if post_type == PostType.FACT_CHECKING:
-            return self.params.p_repost_factchecking
+        if post_type == PostType.dictatorship:
+            return self.params.p_repost_dictatorship
+        if post_type == PostType.democracy:
+            return self.params.p_repost_democracy
         return self.params.p_repost_neutral
 
     def censor_posts(self, post_ids: list[str]) -> dict[str, Any]:
@@ -145,9 +145,18 @@ class SimulationEngine:
                         self.posts.schedule_repost(post_id, node_id)
 
             if self._rng.random() <= self.params.p_add_edge:
-                self.graph.add_random_edge(self._rng)
+                self.graph.add_convergent_edge(
+                    self.node_states,
+                    self.params.edge_addition_dictatorship_threshold,
+                    self.params.edge_addition_democracy_threshold,
+                    self._rng,
+                )
             if self._rng.random() <= self.params.p_remove_edge:
-                self.graph.remove_random_edge(self._rng)
+                self.graph.remove_discordant_edge(
+                    self.node_states,
+                    self.params.edge_removal_opinion_threshold,
+                    self._rng,
+                )
 
             self.node_states = [
                 min(1.0, max(0.0, state + delta))
@@ -214,8 +223,8 @@ class SimulationEngine:
                 "series": [
                     {
                         "step": point.step,
-                        "misinformation": point.misinformation,
-                        "fact_checking": point.fact_checking,
+                        "dictatorship": point.dictatorship,
+                        "democracy": point.democracy,
                         "neutral": point.neutral,
                     }
                     for point in self.timeline
@@ -227,7 +236,7 @@ class SimulationEngine:
             percentages = GameLogic.percentages(self.node_states, self.params.neutrality_tolerance)
             return {
                 "current_step": self.current_step,
-                "max_steps": self.params.N_steps,
+                "max_steps": self.params.election_step,
                 "outcome": self.outcome.value,
                 "message": self.message,
                 "percentages": percentages,

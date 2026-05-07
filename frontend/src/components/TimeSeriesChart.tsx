@@ -8,9 +8,9 @@ interface TimeSeriesChartProps {
 }
 
 const seriesConfig = [
-  { key: 'misinformation', label: 'Misinformation', color: '#f1a340' },
+  { key: 'dictatorship', label: 'Dictatorship', color: '#f1a340' },
   { key: 'neutral', label: 'Neutral', color: '#f7f7f7' },
-  { key: 'fact_checking', label: 'Fact-checking', color: '#998ec3' },
+  { key: 'democracy', label: 'Democracy', color: '#998ec3' },
 ] as const;
 
 export function TimeSeriesChart({ data }: TimeSeriesChartProps) {
@@ -77,9 +77,9 @@ export function TimeSeriesChart({ data }: TimeSeriesChartProps) {
       path.attr('stroke-dasharray', `${totalLength} ${totalLength}`).attr('stroke-dashoffset', totalLength).transition().duration(700).attr('stroke-dashoffset', 0);
     });
 
-    const legend = svg.append('g').attr('transform', `translate(${width - 360}, 20)`);
+    const legend = svg.append('g').attr('transform', `translate(${width - 500}, 20)`);
     seriesConfig.forEach((series, index) => {
-      const row = legend.append('g').attr('transform', `translate(${index * 118}, 0)`);
+      const row = legend.append('g').attr('transform', `translate(${index * 160}, 0)`);
       row.append('circle').attr('r', 5).attr('cx', 0).attr('cy', 0).attr('fill', series.color);
       row.append('text').attr('x', 10).attr('y', 4).attr('fill', '#eef2f6').text(series.label);
     });
@@ -90,7 +90,7 @@ export function TimeSeriesChart({ data }: TimeSeriesChartProps) {
       <div className="panel-heading">
         <div>
           <p className="eyebrow">Trend</p>
-          <h2>Orientation Over Time</h2>
+          <h2>Election Sentiment Over Time</h2>
         </div>
       </div>
       <svg ref={svgRef} className="chart-svg" role="img" aria-label="Simulation time series chart" />
