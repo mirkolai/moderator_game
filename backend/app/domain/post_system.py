@@ -1,8 +1,27 @@
 from __future__ import annotations
 
+import random
 from collections import defaultdict
 
 from app.domain.models import PostRecord, PostStatus, PostType
+
+_SUBTYPES: dict[PostType, list[str]] = {
+    PostType.democracy: [
+        "Free Press Story",
+        "Civic Rights Report",
+        "Voter Outreach",
+    ],
+    PostType.NEUTRAL: [
+        "Community Update",
+        "Local News",
+        "Public Notice",
+    ],
+    PostType.dictatorship: [
+        "State Media Bulletin",
+        "Opposition Smear",
+        "Authority Decree",
+    ],
+}
 
 
 class PostSystem:
@@ -12,9 +31,11 @@ class PostSystem:
         self._next_id = 1
 
     def create_post(self, post_type: PostType, creator_node: int, creation_step: int) -> PostRecord:
+        sub_type = random.choice(_SUBTYPES[post_type])
         post = PostRecord(
             id=f"post-{self._next_id}",
             type=post_type,
+            sub_type=sub_type,
             creator_node=creator_node,
             creation_step=creation_step,
             seen_by={creator_node},
@@ -79,9 +100,11 @@ class PostSystem:
         return {
             "id": post.id,
             "type": post.type.value,
+            "sub_type": post.sub_type,
             "creator_node": post.creator_node,
             "creation_step": post.creation_step,
             "seen_by": sorted(post.seen_by),
             "reposted_by": sorted(post.reposted_by),
+            "repost_count": post.repost_count,
             "status": post.status.value,
         }

@@ -25,10 +25,12 @@ class Outcome(str, Enum):
 class PostRecord:
     id: str
     type: PostType
+    sub_type: str
     creator_node: int
     creation_step: int
     seen_by: set[int] = field(default_factory=set)
     reposted_by: set[int] = field(default_factory=set)
+    repost_count: int = 0
     status: PostStatus = PostStatus.ACTIVE
     active_emitters: set[int] = field(default_factory=set)
     next_emitters: set[int] = field(default_factory=set)

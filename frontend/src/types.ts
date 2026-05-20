@@ -24,10 +24,12 @@ export interface GraphState {
 export interface PostRecord {
   id: string;
   type: PostType;
+  sub_type: string;
   creator_node: number;
   creation_step: number;
   seen_by: number[];
   reposted_by: number[];
+  repost_count: number;
   status: PostStatus;
 }
 

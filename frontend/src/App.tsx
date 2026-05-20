@@ -2,7 +2,6 @@ import { FeedPanel } from './components/FeedPanel';
 import { NetworkGraph } from './components/NetworkGraph';
 import { NotificationBell } from './components/NotificationBell';
 import { ParameterPanel } from './components/ParameterPanel';
-import { TimeSeriesChart } from './components/TimeSeriesChart';
 import { useSimulation } from './hooks/useSimulation';
 import { useEffect, useRef, useState } from 'react';
 
@@ -18,7 +17,6 @@ export default function App() {
     graph,
     status,
     parameters,
-    timeSeries,
     selectedNodeId,
     feed,
     highlightedNodeIds,
@@ -123,15 +121,30 @@ export default function App() {
         </div>
         <div className="status-card card">
           <span>Dictatorship</span>
-          <strong>{toPercent(status?.percentages.dictatorship)}</strong>
+          <div className="status-bar-row">
+            <strong>{toPercent(status?.percentages.dictatorship)}</strong>
+            <div className="status-bar-track">
+              <div className="status-bar-fill dictatorship-fill" style={{ width: toPercent(status?.percentages.dictatorship) }} />
+            </div>
+          </div>
         </div>
         <div className="status-card card">
           <span>Neutral</span>
-          <strong>{toPercent(status?.percentages.neutral)}</strong>
+          <div className="status-bar-row">
+            <strong>{toPercent(status?.percentages.neutral)}</strong>
+            <div className="status-bar-track">
+              <div className="status-bar-fill neutral-fill" style={{ width: toPercent(status?.percentages.neutral) }} />
+            </div>
+          </div>
         </div>
         <div className="status-card card">
           <span>Democracy</span>
-          <strong>{toPercent(status?.percentages.democracy)}</strong>
+          <div className="status-bar-row">
+            <strong>{toPercent(status?.percentages.democracy)}</strong>
+            <div className="status-bar-track">
+              <div className="status-bar-fill democracy-fill" style={{ width: toPercent(status?.percentages.democracy) }} />
+            </div>
+          </div>
         </div>
       </section>
 
@@ -175,7 +188,6 @@ export default function App() {
             />
           </div>
 
-          <TimeSeriesChart data={timeSeries} />
         </section>
       </main>
 

@@ -123,6 +123,8 @@ class SimulationEngine:
                 current_emitters = list(post.active_emitters)
                 post.active_emitters.clear()
                 for emitter in current_emitters:
+                    if emitter != post.creator_node:
+                        post.repost_count += 1
                     for neighbor in self.graph.neighbors_for_propagation(emitter):
                         if self.posts.mark_seen(post.id, neighbor):
                             state_deltas[neighbor] += self._type_influence(neighbor, post.type)

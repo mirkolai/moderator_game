@@ -45,7 +45,7 @@ export function NetworkGraph({ graph, parameters, selectedNodeId, highlightedNod
 
   // Compute neighbors of selected node for visibility control
   const selectedNodeNeighbors = useMemo(() => {
-    if (!selectedNodeId || !graph) return new Set<number>();
+    if (selectedNodeId === null || !graph) return new Set<number>();
     const neighbors = new Set<number>();
     neighbors.add(selectedNodeId); // Include the node itself
     for (const edge of graph.edges) {

@@ -36,8 +36,8 @@ docker compose up --build
 ```
 
 - Frontend: http://localhost
-- Backend API: http://localhost:8000/api
-- API docs (Swagger UI): http://localhost:8000/docs
+- Backend API: http://localhost:8080/api
+- API docs (Swagger UI): http://localhost:8080/docs
 
 The frontend container uses nginx to serve the compiled SPA and reverse-proxies
 `/api/*` to the backend container, so no CORS configuration is needed and the
