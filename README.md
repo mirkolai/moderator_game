@@ -35,13 +35,13 @@ A modular simulation game about dictatorship spread in a dynamic social network.
 docker compose up --build
 ```
 
-- Frontend: http://localhost
-- Backend API: http://localhost:8080/api
-- API docs (Swagger UI): http://localhost:8080/docs
+- Frontend: http://localhost:8081
+- API docs (Swagger UI): http://localhost:8081/docs
 
-The frontend container uses nginx to serve the compiled SPA and reverse-proxies
-`/api/*` to the backend container, so no CORS configuration is needed and the
-browser never talks to the backend directly.
+Only port **8081** needs to be open on the server. The frontend container uses
+nginx to serve the compiled SPA and reverse-proxies `/api/*` to the backend
+container internally, so the backend port is never exposed and no CORS
+configuration is needed.
 
 ## Run locally (without Docker)
 
