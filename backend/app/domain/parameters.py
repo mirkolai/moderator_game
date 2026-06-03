@@ -1,15 +1,10 @@
 from __future__ import annotations
 
-from typing import Literal
-
 from pydantic import BaseModel, Field
 
 
 class SimulationParameters(BaseModel):
-    mission_role: Literal["well_informed_citizen", "bad_actor"] = "well_informed_citizen"
     number_of_nodes: int = Field(default=24, ge=8, le=200)
-    graph_type: Literal["random"] = "random"
-    directed: bool = False
 
     p_generate_base: float = Field(default=0.45, ge=0.0, le=1.0)
     weight_state_influence_on_post_type: float = Field(default=1.35, ge=0.0, le=5.0)
@@ -34,4 +29,4 @@ class SimulationParameters(BaseModel):
 
     election_step: int = Field(default=20, ge=15, le=30)
     win_threshold: float = Field(default=0.8, ge=0.5, le=1.0)
-    neutrality_tolerance: float = Field(default=0.2, ge=0.0, le=0.3)
+    neutrality_tolerance: float = Field(default=0.5, ge=0.0, le=0.5)

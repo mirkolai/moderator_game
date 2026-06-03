@@ -28,15 +28,14 @@ class SimulationEngine:
             if params is not None:
                 self.params = params
             self.current_step = 0
-            self.node_states = [
-                min(1.0, max(0.0, 0.5 + self._rng.uniform(-0.16, 0.16)))
-                for _ in range(self.params.number_of_nodes)
-            ]
-            self.graph = GraphManager.random_graph(
-                number_of_nodes=self.params.number_of_nodes,
-                directed=self.params.directed,
-                rng=self._rng,
-            )
+            self.node_states = [0.5 for _ in range(self.params.number_of_nodes)]
+            #self.graph = GraphManager.random_graph(
+            #    number_of_nodes=self.params.number_of_nodes,
+            #    directed=self.params.directed,
+            #    rng=self._rng,
+            #)
+            self.graph = GraphManager.mod_game_net(number_of_nodes=self.params.number_of_nodes)
+
             self.posts = PostSystem()
             self.censorship_actions_remaining = self.params.max_censorship_actions_per_step
             self.outcome = Outcome.RUNNING
@@ -185,7 +184,7 @@ class SimulationEngine:
         with self._lock:
             return {
                 "step": self.current_step,
-                "directed": self.params.directed,
+                "directed": False,
                 "nodes": [
                     {
                         "id": node_id,

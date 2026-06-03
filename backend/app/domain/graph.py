@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import random
 from dataclasses import dataclass, field
+import networkx as nx
+import random
 
 
 @dataclass(slots=True)
@@ -32,6 +34,71 @@ class GraphManager:
                 if rng.random() < edge_probability:
                     graph.add_edge(source, target)
         return graph
+    
+
+    # moderation game network with (default two) communities:
+
+    # start with communities (no hubs or clustering),
+    # make sure it's connected,
+    # then increase clustering (triangles) and grow hubs
+    # by connecting hubs with their friends of friends
+    @classmethod
+    def mod_game_net(cls,number_of_nodes=50,communities=2, avg_k=5,min_cc=0.4,rng=None,) -> "GraphManager":
+        if rng is None:
+            rng = random.Random()
+
+        avg_p = avg_k / (number_of_nodes - 1)
+        p_in = avg_p * 1.9
+        p_out = avg_p * 0.1
+
+        G = nx.gaussian_random_partition_graph(
+            number_of_nodes,
+            number_of_nodes // communities,
+            number_of_nodes * 10,
+            p_in,
+            p_out
+        )
+
+        # garantisci connettività
+        while not nx.is_connected(G):
+            components = list(nx.connected_components(G))
+            c1, c2 = rng.sample(components, 2)
+            G.add_edge(rng.choice(list(c1)), rng.choice(list(c2)))
+
+        # aumenta clustering
+        while nx.average_clustering(G) < min_cc:
+            hub = rng.choices(
+                list(G.nodes()),
+                weights=[G.degree(n) for n in G]
+            )[0]
+
+            if G.degree(hub) < 1:
+                continue
+
+            friend = rng.choice(list(G.neighbors(hub)))
+
+            if G.degree(friend) < 2:
+                continue
+
+            neighbors = set(G.neighbors(friend))
+            neighbors.discard(hub)
+
+            if not neighbors:
+                continue
+
+            fof = rng.choice(list(neighbors))
+
+            if not G.has_edge(hub, fof):
+                G.add_edge(hub, fof)
+
+        # ---- conversione finale a GraphManager ----
+        graph = cls(number_of_nodes=number_of_nodes, directed=False)
+
+        for u, v in G.edges():
+            graph.add_edge(u, v)
+
+        return graph
+    
 
     def add_edge(self, source: int, target: int) -> bool:
         if source == target or target in self.adjacency[source]:
