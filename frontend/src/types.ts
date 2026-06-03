@@ -69,10 +69,7 @@ export interface StatusResponse {
 }
 
 export interface SimulationParameters {
-  mission_role: 'well_informed_citizen' | 'bad_actor';
   number_of_nodes: number;
-  graph_type: 'random';
-  directed: boolean;
   p_generate_base: number;
   weight_state_influence_on_post_type: number;
   bias_dictatorship: number;

@@ -90,9 +90,6 @@ export function NotificationBell({ notifications, onMarkAllRead }: NotificationB
         <div className="notif-dropdown card" role="dialog" aria-label="Lista notifiche">
           <div className="notif-dropdown__header">
             <span className="eyebrow">Notifiche</span>
-            {notifications.length > 0 && (
-              <span className="counter-pill">{notifications.length}</span>
-            )}
           </div>
 
           {notifications.length === 0 ? (

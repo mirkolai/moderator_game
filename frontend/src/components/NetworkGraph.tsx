@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useRef } from 'react';
 import * as d3 from 'd3';
 
-import type { EdgeDatum, GraphState, NodeDatum, SimulationParameters } from '../types';
+import type { EdgeDatum, GraphState, NodeDatum } from '../types';
 
 interface NetworkGraphProps {
   graph: GraphState | null;
-  parameters: SimulationParameters | null;
   selectedNodeId: number | null;
   highlightedNodeIds: number[];
   onSelectNode: (nodeId: number) => void;
@@ -26,22 +25,15 @@ interface RenderLinkDatum {
 function edgeKey(source: number, target: number): string {
   return `${source}-${target}`;
 }
-export function NetworkGraph({ graph, parameters, selectedNodeId, highlightedNodeIds, onSelectNode }: NetworkGraphProps) {
+export function NetworkGraph({ graph, selectedNodeId, highlightedNodeIds, onSelectNode }: NetworkGraphProps) {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const highlightedSet = useMemo(() => new Set(highlightedNodeIds), [highlightedNodeIds]);
 
-  // Dynamic color scale based on neutrality tolerance parameter
-  const colorScale = useMemo(() => {
-    if (!parameters) {
-      // Fallback to linear scale if no parameters yet
-      return d3.scaleLinear<string>().domain([0, 0.5, 1]).range(['#f1a340', '#f7f7f7', '#998ec3']);
-    }
-    // Threshold scale: nodes at extremes get strong colors, neutral band gets neutral color
-    const scale = (d3.scaleThreshold() as any)
-      .domain([0.5 - parameters.neutrality_tolerance, 0.5 + parameters.neutrality_tolerance])
-      .range(['#f1a340', '#f7f7f7', '#998ec3']);
-    return scale as d3.ScaleLinear<number, string>;
-  }, [parameters]);
+  const nodeColor = (node: SimNode) => {
+    if (node.classification === 'dictatorship') return '#f1a340';
+    if (node.classification === 'democracy') return '#998ec3';
+    return '#f7f7f7';
+  };
 
   // Compute neighbors of selected node for visibility control
   const selectedNodeNeighbors = useMemo(() => {
@@ -260,7 +252,7 @@ export function NetworkGraph({ graph, parameters, selectedNodeId, highlightedNod
       .transition()
       .duration(600)
       .attr('r', (node) => nodeRadius(node.id))
-      .attr('fill', (node) => colorScale(node.state));
+      .attr('fill', (node) => nodeColor(node));
 
     nodeSelRef.current = nodeSelection;
 
@@ -366,7 +358,7 @@ export function NetworkGraph({ graph, parameters, selectedNodeId, highlightedNod
     // Update fill color immediately (no transition) to ensure colors are always correct
     nodeSelRef.current
       ?.select('circle')
-      .attr('fill', (node) => colorScale(node.state));
+      .attr('fill', (node) => nodeColor(node));
 
     // Update stroke and other visual properties with transition
     nodeSelRef.current
@@ -384,21 +376,10 @@ export function NetworkGraph({ graph, parameters, selectedNodeId, highlightedNod
       .attr('filter', (node) =>
         highlightedSet.has(node.id) ? 'drop-shadow(0 0 12px rgba(255, 206, 115, 0.65))' : null,
       );
-  }, [selectedNodeId, highlightedSet, selectedNodeNeighbors, colorScale]);
+  }, [selectedNodeId, highlightedSet, selectedNodeNeighbors]);
 
   return (
     <section className="card graph-panel">
-      <div className="panel-heading">
-        <div>
-          <p className="eyebrow">Network</p>
-          <h2>Opinion Propagation Map</h2>
-        </div>
-        <div className="legend-inline">
-          <span><i className="legend-dot dictatorship" /> Dictatorship leaning</span>
-          <span><i className="legend-dot neutral" /> Neutral</span>
-          <span><i className="legend-dot democracy" /> Democracy leaning</span>
-        </div>
-      </div>
       <svg ref={svgRef} className="graph-svg" role="img" aria-label="Simulation network graph" />
     </section>
   );

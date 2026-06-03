@@ -33,11 +33,7 @@ export default function App() {
     updateParameters,
   } = useSimulation();
 
-  const isWellInformed = parameters?.mission_role !== 'bad_actor';
-  const missionLabel = isWellInformed ? 'Well-informed citizen' : 'Bad actor';
-  const missionDescription = isWellInformed
-    ? 'Mission: moderate the community to defend democracy before election day.'
-    : 'Mission: manipulate the information space to push the community toward dictatorship before election day.';
+  const missionDescription = 'Mission: moderate the community to defend democracy before election day.';
   const currentStep = status?.current_step ?? 0;
   const maxSteps = status?.max_steps ?? parameters?.election_step ?? 0;
   const daysToElection = Math.max(0, maxSteps - currentStep);
@@ -45,7 +41,6 @@ export default function App() {
   const isGameRunning = status?.outcome === 'running';
   const hasGameStarted = currentStep > 0;
   const isGameFinished = !isGameRunning && hasGameStarted;
-  const actionButtonLabel = isGameFinished ? 'Restart' : hasGameStarted ? 'Reset' : 'Start';
 
   // Auto-step when moderation actions run out during gameplay
   useEffect(() => {
@@ -77,34 +72,7 @@ export default function App() {
           </p>
         </div>
         <div className="toolbar-actions">
-          <div className="counter-pill">Role: {missionLabel}</div>
           <NotificationBell notifications={notifications} onMarkAllRead={markAllRead} />
-          <button
-            type="button"
-            className={`primary-button ${actionButtonLabel === 'Reset' ? 'is-reset-state' : ''}`}
-            onClick={() => {
-              void (async () => {
-                if (isGameFinished) {
-                  // Restart: reset to step 0, then immediately move to first playable step.
-                  await resetSimulation();
-                  prevModerationActionsRef.current = null;
-                  await stepSimulation();
-                  return;
-                }
-
-                if (!hasGameStarted) {
-                  await stepSimulation();
-                  return;
-                }
-
-                await resetSimulation();
-                prevModerationActionsRef.current = null;
-              })();
-            }}
-            disabled={loading}
-          >
-            {actionButtonLabel}
-          </button>
         </div>
       </header>
 
@@ -116,33 +84,42 @@ export default function App() {
           <strong>{daysToElection} days to election</strong>
         </div>
         <div className="status-card card">
-          <span>Outcome</span>
-          <strong className={`outcome outcome-${status?.outcome ?? 'running'}`}>{status?.outcome ?? 'running'}</strong>
-        </div>
-        <div className="status-card card">
-          <span>Dictatorship</span>
-          <div className="status-bar-row">
-            <strong>{toPercent(status?.percentages.dictatorship)}</strong>
-            <div className="status-bar-track">
-              <div className="status-bar-fill dictatorship-fill" style={{ width: toPercent(status?.percentages.dictatorship) }} />
+          <span>Distribution</span>
+          <div className="status-stack">
+            <div className="status-bar-row dictatorship-row">
+              <strong>{toPercent(status?.percentages.dictatorship)}</strong>
+              <div className="status-bar-track">
+                <div className="status-bar-fill dictatorship-fill" style={{ width: toPercent(status?.percentages.dictatorship) }} />
+              </div>
+            </div>
+            <div className="status-bar-row neutral-row">
+              <strong>{toPercent(status?.percentages.neutral)}</strong>
+              <div className="status-bar-track">
+                <div className="status-bar-fill neutral-fill" style={{ width: toPercent(status?.percentages.neutral) }} />
+              </div>
+            </div>
+            <div className="status-bar-row democracy-row">
+              <strong>{toPercent(status?.percentages.democracy)}</strong>
+              <div className="status-bar-track">
+                <div className="status-bar-fill democracy-fill" style={{ width: toPercent(status?.percentages.democracy) }} />
+              </div>
             </div>
           </div>
         </div>
         <div className="status-card card">
-          <span>Neutral</span>
-          <div className="status-bar-row">
-            <strong>{toPercent(status?.percentages.neutral)}</strong>
-            <div className="status-bar-track">
-              <div className="status-bar-fill neutral-fill" style={{ width: toPercent(status?.percentages.neutral) }} />
+          <span>Legend</span>
+          <div className="status-legend">
+            <div className="status-legend-item">
+              <i className="legend-dot dictatorship" />
+              <span>Dictatorship</span>
             </div>
-          </div>
-        </div>
-        <div className="status-card card">
-          <span>Democracy</span>
-          <div className="status-bar-row">
-            <strong>{toPercent(status?.percentages.democracy)}</strong>
-            <div className="status-bar-track">
-              <div className="status-bar-fill democracy-fill" style={{ width: toPercent(status?.percentages.democracy) }} />
+            <div className="status-legend-item">
+              <i className="legend-dot neutral" />
+              <span>Neutral</span>
+            </div>
+            <div className="status-legend-item">
+              <i className="legend-dot democracy" />
+              <span>Democracy</span>
             </div>
           </div>
         </div>
@@ -156,7 +133,10 @@ export default function App() {
         aria-expanded={isParameterPanelOpen}
         aria-controls="parameter-panel"
       >
-        {isParameterPanelOpen ? '◀' : '▶'}
+        <span className="panel-toggle-indicator" aria-hidden="true">
+          {isParameterPanelOpen ? '◀' : '▶'}
+        </span>
+        <span className="panel-toggle-label">Parameters</span>
       </button>
 
       <main className={`layout-grid ${isParameterPanelOpen ? 'parameters-open' : 'parameters-closed'}`}>
@@ -172,7 +152,6 @@ export default function App() {
           <div className="visual-row">
             <NetworkGraph
               graph={graph}
-              parameters={parameters}
               selectedNodeId={selectedNodeId}
               highlightedNodeIds={highlightedNodeIds}
               onSelectNode={(nodeId) => void selectNode(nodeId)}
@@ -192,6 +171,32 @@ export default function App() {
       </main>
 
       <footer className="footer-note">{status?.message ?? 'Loading simulation state...'}</footer>
+
+      {isGameFinished ? (
+        <div className="endgame-overlay" role="dialog" aria-modal="true" aria-live="polite">
+          <div className="endgame-card card">
+            <p className="eyebrow">Match Result</p>
+            <h2 className={`endgame-title ${status?.outcome === 'won' ? 'is-win' : 'is-loss'}`}>
+              {status?.outcome === 'won' ? 'Hai vinto' : 'Hai perso'}
+            </h2>
+            <p className="endgame-message">{status?.message ?? 'La simulazione e terminata.'}</p>
+            <button
+              type="button"
+              className="primary-button"
+              disabled={loading}
+              onClick={() => {
+                void (async () => {
+                  await resetSimulation();
+                  prevModerationActionsRef.current = null;
+                  await stepSimulation();
+                })();
+              }}
+            >
+              Restart
+            </button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -12,22 +12,51 @@ function TooltipPortal({ text, anchorRef }: TooltipPortalProps) {
   const [style, setStyle] = useState<React.CSSProperties>({ opacity: 0, pointerEvents: 'none' });
 
   useEffect(() => {
-    const el = anchorRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    const TOOLTIP_WIDTH = 300;
-    const MARGIN = 8;
-    const left = rect.left - TOOLTIP_WIDTH - MARGIN;
-    const top = rect.top + rect.height / 2 + window.scrollY;
-    setStyle({
-      position: 'absolute',
-      top,
-      left: Math.max(8, left),
-      width: TOOLTIP_WIDTH,
-      transform: 'translateY(-50%)',
-      opacity: 1,
-      pointerEvents: 'none',
-    });
+    const updatePosition = () => {
+      const el = anchorRef.current;
+      if (!el) return;
+
+      const rect = el.getBoundingClientRect();
+      const viewportWidth = window.innerWidth;
+      const margin = 8;
+      const width = Math.min(300, viewportWidth - margin * 2);
+      const narrowViewport = viewportWidth < 900;
+
+      if (narrowViewport) {
+        const centeredLeft = rect.left + rect.width / 2 - width / 2 + window.scrollX;
+        const maxLeft = window.scrollX + viewportWidth - width - margin;
+        setStyle({
+          position: 'absolute',
+          top: rect.bottom + margin + window.scrollY,
+          left: Math.min(Math.max(window.scrollX + margin, centeredLeft), maxLeft),
+          width,
+          transform: 'none',
+          opacity: 1,
+          pointerEvents: 'none',
+        });
+        return;
+      }
+
+      const left = rect.left - width - margin + window.scrollX;
+      setStyle({
+        position: 'absolute',
+        top: rect.top + rect.height / 2 + window.scrollY,
+        left: Math.max(window.scrollX + margin, left),
+        width,
+        transform: 'translateY(-50%)',
+        opacity: 1,
+        pointerEvents: 'none',
+      });
+    };
+
+    updatePosition();
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, { passive: true });
+
+    return () => {
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition);
+    };
   }, [anchorRef]);
 
   return createPortal(
@@ -45,7 +74,7 @@ interface ParameterPanelProps {
 type ParameterKey = keyof SimulationParameters;
 
 const groups: Array<{ title: string; keys: ParameterKey[] }> = [
-  { title: 'Core', keys: ['mission_role', 'number_of_nodes', 'directed', 'election_step', 'win_threshold', 'neutrality_tolerance'] },
+  { title: 'Core', keys: ['number_of_nodes', 'election_step', 'win_threshold', 'neutrality_tolerance'] },
   {
     title: 'Posting',
     keys: ['p_generate_base', 'weight_state_influence_on_post_type', 'bias_dictatorship', 'bias_democracy', 'bias_neutral'],
@@ -59,10 +88,7 @@ const groups: Array<{ title: string; keys: ParameterKey[] }> = [
 ];
 
 const labels: Record<ParameterKey, string> = {
-  mission_role: 'Player role',
   number_of_nodes: 'Number of nodes',
-  graph_type: 'Graph type',
-  directed: 'Directed graph',
   p_generate_base: 'Base generation probability',
   weight_state_influence_on_post_type: 'State influence on post type',
   bias_dictatorship: 'dictatorship bias',
@@ -85,10 +111,7 @@ const labels: Record<ParameterKey, string> = {
 };
 
 const descriptions: Record<ParameterKey, string> = {
-  mission_role: 'Choose your mission. Well-informed citizen: moderate the network to defend democracy. Bad actor: spread propaganda to push dictatorship.',
   number_of_nodes: 'Total number of citizens in the network. Range: 8–200. Low: fast, sparse simulation. High: richer dynamics but slower.',
-  graph_type: 'Network generation strategy. Fixed to "random" in this version.',
-  directed: 'If enabled, follow links have direction (A can follow B without B following A). Off: symmetric connections.',
   p_generate_base: 'Base probability that a citizen creates a post each day. Range: 0–1. Low: few posts, slow spread. High: dense information flow.',
   weight_state_influence_on_post_type: 'How strongly a citizen\'s opinion drives the content they publish. Range: 0–5. Low (≈0): bias values dominate. High (≈5): opinion-aligned users almost always publish matching content.',
   bias_dictatorship: 'Baseline score for publishing dictatorship-leaning content, independent of opinion. Range: 0–5. Higher means more propaganda produced overall.',
@@ -107,13 +130,8 @@ const descriptions: Record<ParameterKey, string> = {
   max_censorship_actions_per_step: 'Moderation actions available per day. Range: 0–25. Low: targeted but limited control. High: strong moderator power.',
   election_step: 'Day the election is held. Range: 15–30. The majority or super-majority at this step decides the outcome.',
   win_threshold: 'Share required for an immediate decisive result before election day. Range: 0.5–1. Low (≈0.5): easy early win/loss. High (≈1): only a near-unanimous result ends the game early.',
-  neutrality_tolerance: 'Half-width of the opinion band classified as neutral (centred on 0.5). Range: 0–0.3. Low: almost everyone is polarised. High: many citizens count as neutral.',
+  neutrality_tolerance: 'Half-width of the opinion band classified as neutral (centred on 0.5). Range: 0–0.5. Low: almost everyone is polarised. High: many citizens count as neutral.',
 };
-
-const roleOptions: Array<{ value: SimulationParameters['mission_role']; label: string }> = [
-  { value: 'well_informed_citizen', label: 'Well-informed citizen' },
-  { value: 'bad_actor', label: 'Bad actor' },
-];
 
 function InfoIcon({ text }: { text: string }) {
   const [visible, setVisible] = useState(false);
@@ -187,7 +205,7 @@ export function ParameterPanel({ parameters, disabled, onApply }: ParameterPanel
             }
           }}
         >
-          {saving ? 'Applying...' : 'Apply + Reset'}
+          {saving ? 'Applying...' : 'Apply + Restart'}
         </button>
       </div>
 
@@ -209,14 +227,6 @@ export function ParameterPanel({ parameters, disabled, onApply }: ParameterPanel
                       checked={value}
                       onChange={(event) => updateValue(key, event.target.checked)}
                     />
-                  ) : key === 'mission_role' ? (
-                    <select value={value} onChange={(event) => updateValue(key, event.target.value)}>
-                      {roleOptions.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
                   ) : (
                     <input
                       type="number"

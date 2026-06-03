@@ -120,6 +120,12 @@ export function FeedPanel({
   onHighlightPost,
   onCensorPost,
 }: FeedPanelProps) {
+  const feedOwnerId = selectedNodeId ?? feed?.node_id ?? null;
+  const visiblePosts =
+    feed === null || feedOwnerId === null
+      ? []
+      : feed.posts.filter((post) => post.creator_node !== feedOwnerId);
+
   return (
     <aside className="feed-panel card">
       <div className="panel-heading">
@@ -127,16 +133,15 @@ export function FeedPanel({
           <p className="eyebrow">Feed</p>
           <h2>Citizen {selectedNodeId ?? '...'}</h2>
         </div>
-        <div className="counter-pill">Moderations left: {censorshipActionsRemaining}</div>
       </div>
 
       {feed === null ? (
         <div className="empty-state">Select a node in the graph to inspect its feed.</div>
-      ) : feed.posts.length === 0 ? (
+      ) : visiblePosts.length === 0 ? (
         <div className="empty-state">This node has not seen any posts yet.</div>
       ) : (
         <div className="post-list">
-          {feed.posts.map((post) => {
+          {visiblePosts.map((post) => {
             const isCensored = post.status === 'censored';
             const isActiveHighlight = highlightedPostId === post.id;
             const elapsedDays = Math.max(0, (currentStep - post.creation_step)-1);

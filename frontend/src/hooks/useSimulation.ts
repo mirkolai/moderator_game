@@ -38,6 +38,7 @@ export function useSimulation() {
   const firstEdgeRemovedNotifiedRef = useRef(false);
   const firstEdgeAddedNotifiedRef = useRef(false);
   const prevEdgeKeysRef = useRef<Set<string>>(new Set());
+  const hasInitializedRef = useRef(false);
 
   const addNotification = (message: string, step: number) => {
     setNotifications((prev) => [
@@ -91,11 +92,17 @@ export function useSimulation() {
   };
 
   useEffect(() => {
+    if (hasInitializedRef.current) {
+      return;
+    }
+    hasInitializedRef.current = true;
+
     void (async () => {
       await hydrate(api.startSimulation);
+      await stepSimulation();
       addNotification(
-        'Each node is a citizen in the online community. Your mission changes with the selected role: defend democracy as a well-informed citizen, or push dictatorship as a bad actor. Click "Advance Day" to start the campaign.',
-        0,
+        'Each node is a citizen in the online community. Your mission is to defend democracy before election day. The simulation is already running: inspect feeds, highlight influence, and moderate strategically.',
+        1,
       );
     })();
   }, []);
@@ -211,6 +218,7 @@ export function useSimulation() {
     setHighlightedNodeIds([]);
     setHighlightedPostId(null);
     await hydrate(() => api.updateParameters(nextParameters), null);
+    await stepSimulation();
   };
 
   return {
