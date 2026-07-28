@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import * as d3 from 'd3';
 
+import { CATEGORY_CONFIG } from '../config/categories';
 import type { EdgeDatum, GraphState, NodeDatum } from '../types';
 
 interface NetworkGraphProps {
@@ -22,17 +23,40 @@ interface RenderLinkDatum {
   change: EdgeChange;
 }
 
+const animalImageModules = import.meta.glob('../img/animal_50x50/*.png', {
+  eager: true,
+  import: 'default',
+}) as Record<string, string>;
+
+const animalImages = Object.entries(animalImageModules)
+  .sort(([leftPath], [rightPath]) => leftPath.localeCompare(rightPath))
+  .map(([, imageSrc]) => imageSrc);
+
 function edgeKey(source: number, target: number): string {
   return `${source}-${target}`;
 }
+
+function formatNodeAlignment(node: NodeDatum): string {
+  const alignment = node.state.toFixed(2);
+  return `Node ${node.id} | Alignment: ${alignment} | Category: ${node.classification}`;
+}
+
+function getNodeImage(nodeId: number): string | null {
+  if (animalImages.length === 0) {
+    return null;
+  }
+  const imageIndex = ((nodeId - 1) % animalImages.length + animalImages.length) % animalImages.length;
+  return animalImages[imageIndex];
+}
+
 export function NetworkGraph({ graph, selectedNodeId, highlightedNodeIds, onSelectNode }: NetworkGraphProps) {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const highlightedSet = useMemo(() => new Set(highlightedNodeIds), [highlightedNodeIds]);
 
   const nodeColor = (node: SimNode) => {
-    if (node.classification === 'dictatorship') return '#f1a340';
-    if (node.classification === 'democracy') return '#998ec3';
-    return '#f7f7f7';
+    if (node.classification === 'gamma') return CATEGORY_CONFIG.gamma.color;
+    if (node.classification === 'alpha') return CATEGORY_CONFIG.alpha.color;
+    return CATEGORY_CONFIG.beta.color;
   };
 
   // Compute neighbors of selected node for visibility control
@@ -169,6 +193,46 @@ export function NetworkGraph({ graph, selectedNodeId, highlightedNodeIds, onSele
     const root = svg.selectAll<SVGGElement, null>('g.scene').data([null]).join('g').attr('class', 'scene');
     const linkLayer = root.selectAll<SVGGElement, null>('g.links').data([null]).join('g').attr('class', 'links');
     const nodeLayer = root.selectAll<SVGGElement, null>('g.nodes').data([null]).join('g').attr('class', 'nodes');
+    const tooltip = d3
+      .select('body')
+      .selectAll<HTMLDivElement, null>('div.graph-node-tooltip')
+      .data([null])
+      .join('div')
+      .attr('class', 'graph-node-tooltip')
+      .style('display', 'none');
+
+    const positionTooltip = (event: MouseEvent) => {
+      const offset = 14;
+      const tooltipNode = tooltip.node();
+      if (!tooltipNode) return;
+
+      const tooltipRect = tooltipNode.getBoundingClientRect();
+      const maxLeft = Math.max(8, window.innerWidth - tooltipRect.width - 8);
+      const maxTop = Math.max(8, window.innerHeight - tooltipRect.height - 8);
+      const left = Math.min(maxLeft, event.clientX + offset);
+      const top = Math.min(maxTop, event.clientY + offset);
+
+      tooltip.style('left', `${left}px`).style('top', `${top}px`);
+    };
+
+    const showTooltip = (event: MouseEvent, node: SimNode) => {
+      const imageSrc = getNodeImage(node.id);
+      const tooltipText = formatNodeAlignment(node);
+      const imageMarkup = imageSrc
+        ? `<img class="graph-node-tooltip__image" src="${imageSrc}" alt="Animal avatar for node ${node.id}" />`
+        : '';
+
+      tooltip
+        .html(`<div class="graph-node-tooltip__text">${tooltipText}</div>${imageMarkup}`)
+        .style('display', 'flex')
+        .style('opacity', 1);
+
+      positionTooltip(event);
+    };
+
+    const hideTooltip = () => {
+      tooltip.style('display', 'none').style('opacity', 0);
+    };
 
     // Click on empty SVG area to deselect
     svg.on('click', (event: MouseEvent) => {
@@ -244,7 +308,10 @@ export function NetworkGraph({ graph, selectedNodeId, highlightedNodeIds, onSele
         } else {
           onSelectRef.current(node.id);
         }
-      });
+      })
+      .on('mouseenter', (event, node) => showTooltip(event, node))
+      .on('mousemove', (event, node) => showTooltip(event, node))
+      .on('mouseleave', hideTooltip);
 
     // Update fill (state color) and radius; stroke is owned by Effect 2
     nodeSelection
@@ -340,6 +407,7 @@ export function NetworkGraph({ graph, selectedNodeId, highlightedNodeIds, onSele
     prevEdgesRef.current = currentEdgesByKey;
 
     return () => {
+      hideTooltip();
       simulation.stop();
     };
   }, [graph]); // ← graph only; selection state never triggers a layout reset

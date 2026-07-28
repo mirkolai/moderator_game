@@ -138,15 +138,15 @@ class GraphManager:
     def add_convergent_edge(
         self,
         node_states: list[float],
-        dictatorship_threshold: float,
-        democracy_threshold: float,
+        gamma_threshold: float,
+        alpha_threshold: float,
         rng: random.Random,
     ) -> tuple[int, int] | None:
         """Add a random edge between two unconnected nodes that share the same opinion cluster.
 
-        A pair qualifies when both nodes are dictatorship-leaning
-        (state <= dictatorship_threshold) or both are democracy-leaning
-        (state >= democracy_threshold).  Returns None if no qualifying pair exists.
+        A pair qualifies when both nodes are low-cluster
+        (state <= gamma_threshold) or both are high-cluster
+        (state >= alpha_threshold). Returns None if no qualifying pair exists.
         """
         candidates: list[tuple[int, int]] = []
         for source in range(self.number_of_nodes):
@@ -159,9 +159,9 @@ class GraphManager:
                     continue
                 s_state = node_states[source]
                 t_state = node_states[target]
-                both_dictatorship = s_state <= dictatorship_threshold and t_state <= dictatorship_threshold
-                both_democracy = s_state >= democracy_threshold and t_state >= democracy_threshold
-                if both_dictatorship or both_democracy:
+                both_gamma = s_state <= gamma_threshold and t_state <= gamma_threshold
+                both_alpha = s_state >= alpha_threshold and t_state >= alpha_threshold
+                if both_gamma or both_alpha:
                     candidates.append((source, target))
         if not candidates:
             return None

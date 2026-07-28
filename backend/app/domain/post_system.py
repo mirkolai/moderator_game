@@ -1,27 +1,50 @@
 from __future__ import annotations
 
+import csv
 import random
 from collections import defaultdict
+from pathlib import Path
 
+from app.domain.category_config import CATEGORY_ALPHA, CATEGORY_BETA, CATEGORY_GAMMA
 from app.domain.models import PostRecord, PostStatus, PostType
 
-_SUBTYPES: dict[PostType, list[str]] = {
-    PostType.democracy: [
-        "Free Press Story",
-        "Civic Rights Report",
-        "Voter Outreach",
-    ],
-    PostType.NEUTRAL: [
-        "Community Update",
-        "Local News",
-        "Public Notice",
-    ],
-    PostType.dictatorship: [
-        "State Media Bulletin",
-        "Opposition Smear",
-        "Authority Decree",
-    ],
+_CONTENT_CSV_BY_TYPE: dict[PostType, str] = {
+    PostType.ALPHA: CATEGORY_ALPHA.posts_csv,
+    PostType.BETA: CATEGORY_BETA.posts_csv,
+    PostType.GAMMA: CATEGORY_GAMMA.posts_csv,
 }
+_POSTS_DIR = Path(__file__).resolve().parent.parent / "post"
+
+
+def _load_contents_from_csv(csv_path: Path) -> list[str]:
+    if not csv_path.exists():
+        return []
+
+    rows: list[str] = []
+    with csv_path.open("r", encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle)
+        if reader.fieldnames and "post_content" in reader.fieldnames:
+            for row in reader:
+                content = (row.get("post_content") or "").strip()
+                if content:
+                    rows.append(content)
+            return rows
+
+        handle.seek(0)
+        fallback_reader = csv.reader(handle)
+        first_row = True
+        for row in fallback_reader:
+            if not row:
+                continue
+            first_col = row[0].strip()
+            if not first_col:
+                continue
+            if first_row and first_col.lower() == "post_content":
+                first_row = False
+                continue
+            first_row = False
+            rows.append(first_col)
+    return rows
 
 
 class PostSystem:
@@ -29,13 +52,36 @@ class PostSystem:
         self.posts: dict[str, PostRecord] = {}
         self.node_seen_posts: dict[int, set[str]] = defaultdict(set)
         self._next_id = 1
+        self._contents_by_type: dict[PostType, list[str]] = {
+            post_type: _load_contents_from_csv(_POSTS_DIR / csv_name)
+            for post_type, csv_name in _CONTENT_CSV_BY_TYPE.items()
+        }
+        self._content_bag_by_type: dict[PostType, list[str]] = {post_type: [] for post_type in PostType}
+        self._last_content_by_type: dict[PostType, str | None] = {post_type: None for post_type in PostType}
+
+    def _next_content(self, post_type: PostType) -> str:
+        content_bag = self._content_bag_by_type[post_type]
+        if not content_bag:
+            content_bag = list(self._contents_by_type.get(post_type, []))
+            random.shuffle(content_bag)
+            last_content = self._last_content_by_type[post_type]
+            if last_content and len(content_bag) > 1 and content_bag[-1] == last_content:
+                content_bag[-1], content_bag[-2] = content_bag[-2], content_bag[-1]
+            self._content_bag_by_type[post_type] = content_bag
+
+        if not content_bag:
+            return f"{post_type.value.title()} content"
+
+        next_content = content_bag.pop()
+        self._last_content_by_type[post_type] = next_content
+        return next_content
 
     def create_post(self, post_type: PostType, creator_node: int, creation_step: int) -> PostRecord:
-        sub_type = random.choice(_SUBTYPES[post_type])
+        content = self._next_content(post_type)
         post = PostRecord(
             id=f"post-{self._next_id}",
             type=post_type,
-            sub_type=sub_type,
+            content=content,
             creator_node=creator_node,
             creation_step=creation_step,
             seen_by={creator_node},
@@ -99,8 +145,8 @@ class PostSystem:
     def serialize_post(self, post: PostRecord) -> dict:
         return {
             "id": post.id,
-            "type": post.type.value,
-            "sub_type": post.sub_type,
+            "category": post.type.value,
+            "content": post.content,
             "creator_node": post.creator_node,
             "creation_step": post.creation_step,
             "seen_by": sorted(post.seen_by),

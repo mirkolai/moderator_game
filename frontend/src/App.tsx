@@ -2,15 +2,20 @@ import { FeedPanel } from './components/FeedPanel';
 import { NetworkGraph } from './components/NetworkGraph';
 import { NotificationBell } from './components/NotificationBell';
 import { ParameterPanel } from './components/ParameterPanel';
+import { CATEGORY_CONFIG } from './config/categories';
 import { useSimulation } from './hooks/useSimulation';
 import { useEffect, useRef, useState } from 'react';
+import youWinImage from './img/youwin.png';
+import youLoseImage from './img/youlose.png';
 
 function toPercent(value: number | undefined) {
   return `${Math.round((value ?? 0) * 100)}%`;
 }
 
+
 export default function App() {
   const [isParameterPanelOpen, setIsParameterPanelOpen] = useState(false);
+  const [isWelcomeOpen, setIsWelcomeOpen] = useState(true);
   const prevModerationActionsRef = useRef<number | null>(null);
 
   const {
@@ -33,7 +38,7 @@ export default function App() {
     updateParameters,
   } = useSimulation();
 
-  const missionDescription = 'Mission: moderate the community to defend democracy before election day.';
+  const missionDescription = `Mission: keep ${CATEGORY_CONFIG.alpha.label} ahead before bulldozers arrive.`;
   const currentStep = status?.current_step ?? 0;
   const maxSteps = status?.max_steps ?? parameters?.election_step ?? 0;
   const daysToElection = Math.max(0, maxSteps - currentStep);
@@ -41,6 +46,8 @@ export default function App() {
   const isGameRunning = status?.outcome === 'running';
   const hasGameStarted = currentStep > 0;
   const isGameFinished = !isGameRunning && hasGameStarted;
+  const endgameImage = status?.outcome === 'won' ? youWinImage : youLoseImage;
+  const endgameImageAlt = status?.outcome === 'won' ? 'You win illustration' : 'You lose illustration';
 
   // Auto-step when moderation actions run out during gameplay
   useEffect(() => {
@@ -78,30 +85,103 @@ export default function App() {
 
       {error ? <div className="error-banner">{error}</div> : null}
 
+      {isWelcomeOpen ? (
+        <div className="welcome-overlay" role="dialog" aria-modal="true" aria-labelledby="welcome-title">
+          <div className="welcome-card card">
+            <p className="eyebrow">Welcome</p>
+            <h2 id="welcome-title" className="welcome-title">Before You Begin</h2>
+            <div className="welcome-content" aria-label="Welcome text">
+              
+
+
+
+<h1>Defend the Forest: Freedom Is Not for Sale</h1>
+
+<p>
+  Welcome to <strong>Moderator</strong>, where you are responsible for monitoring
+  the official social network of the forest animals!
+</p>
+
+<p>
+  Humans are preparing an invasion. Their goal is to cut down the forest and
+  build a zoo. To achieve this, they are flooding the social network with
+  misleading posts, false promises, and manipulative messages, trying to convince
+  the animals that life in cages is safer and more comfortable than living free
+  in nature.
+</p>
+
+<p>
+  As the <strong>Chief Moderator</strong>, your mission is to protect the animal
+  community from this digital propaganda. You must:
+</p>
+
+<ul>
+  <li>Identify posts that spread false information about the forest or the zoo.</li>
+  <li>Moderate messages that use deceptive language to manipulate or frighten the animals.</li>
+  <li>Reduce the visibility of content that creates unnecessary panic within the community.</li>
+</ul>
+
+<p>
+  You only have a few days before the bulldozers arrive. If public opinion among
+  the animals remains in favor of protecting the forest, the humans will face a
+  united community and will be forced to abandon their plans forever.
+</p>
+
+<p>
+  However, if human propaganda prevails, the animals will fall for the deception,
+  the forest will be destroyed, and they will all end up living behind bars in
+  cages.
+</p>
+
+<p>
+  <strong>Stay alert.</strong> Carefully analyze every post, protect the truth,
+  and preserve the freedom of the forest.
+</p>
+
+<h2>The fate of the forest is in your hands.</h2>
+
+
+
+
+
+
+
+            </div>
+            <button
+              type="button"
+              className="primary-button"
+              onClick={() => setIsWelcomeOpen(false)}
+            >
+              Enter Simulation
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       <section className="status-strip">
         <div className="status-card card">
           <span>Countdown</span>
-          <strong>{daysToElection} days to election</strong>
+          <strong>{daysToElection} days to bulldozers arrive</strong>
         </div>
         <div className="status-card card">
           <span>Distribution</span>
           <div className="status-stack">
-            <div className="status-bar-row dictatorship-row">
-              <strong>{toPercent(status?.percentages.dictatorship)}</strong>
+            <div className="status-bar-row gamma-row">
+              <strong>{toPercent(status?.percentages.gamma)}</strong>
               <div className="status-bar-track">
-                <div className="status-bar-fill dictatorship-fill" style={{ width: toPercent(status?.percentages.dictatorship) }} />
+                <div className="status-bar-fill gamma-fill" style={{ width: toPercent(status?.percentages.gamma) }} />
               </div>
             </div>
-            <div className="status-bar-row neutral-row">
-              <strong>{toPercent(status?.percentages.neutral)}</strong>
+            <div className="status-bar-row beta-row">
+              <strong>{toPercent(status?.percentages.beta)}</strong>
               <div className="status-bar-track">
-                <div className="status-bar-fill neutral-fill" style={{ width: toPercent(status?.percentages.neutral) }} />
+                <div className="status-bar-fill beta-fill" style={{ width: toPercent(status?.percentages.beta) }} />
               </div>
             </div>
-            <div className="status-bar-row democracy-row">
-              <strong>{toPercent(status?.percentages.democracy)}</strong>
+            <div className="status-bar-row alpha-row">
+              <strong>{toPercent(status?.percentages.alpha)}</strong>
               <div className="status-bar-track">
-                <div className="status-bar-fill democracy-fill" style={{ width: toPercent(status?.percentages.democracy) }} />
+                <div className="status-bar-fill alpha-fill" style={{ width: toPercent(status?.percentages.alpha) }} />
               </div>
             </div>
           </div>
@@ -110,16 +190,16 @@ export default function App() {
           <span>Legend</span>
           <div className="status-legend">
             <div className="status-legend-item">
-              <i className="legend-dot dictatorship" />
-              <span>Dictatorship</span>
+              <i className="legend-dot gamma" />
+              <span>{CATEGORY_CONFIG.gamma.label}</span>
             </div>
             <div className="status-legend-item">
-              <i className="legend-dot neutral" />
-              <span>Neutral</span>
+              <i className="legend-dot beta" />
+              <span>{CATEGORY_CONFIG.beta.label}</span>
             </div>
             <div className="status-legend-item">
-              <i className="legend-dot democracy" />
-              <span>Democracy</span>
+              <i className="legend-dot alpha" />
+              <span>{CATEGORY_CONFIG.alpha.label}</span>
             </div>
           </div>
         </div>
@@ -177,9 +257,10 @@ export default function App() {
           <div className="endgame-card card">
             <p className="eyebrow">Match Result</p>
             <h2 className={`endgame-title ${status?.outcome === 'won' ? 'is-win' : 'is-loss'}`}>
-              {status?.outcome === 'won' ? 'Hai vinto' : 'Hai perso'}
+              {status?.outcome === 'won' ? 'You Win' : 'You Lose'}
             </h2>
-            <p className="endgame-message">{status?.message ?? 'La simulazione e terminata.'}</p>
+            <img className="endgame-image" src={endgameImage} alt={endgameImageAlt} />
+            <p className="endgame-message">{status?.message ?? 'The simulation has ended.'}</p>
             <button
               type="button"
               className="primary-button"

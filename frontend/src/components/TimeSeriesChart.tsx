@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import * as d3 from 'd3';
 
+import { CATEGORY_CONFIG } from '../config/categories';
 import type { TimeSeriesPoint } from '../types';
 
 interface TimeSeriesChartProps {
@@ -8,9 +9,9 @@ interface TimeSeriesChartProps {
 }
 
 const seriesConfig = [
-  { key: 'dictatorship', label: 'Dictatorship', color: '#f1a340' },
-  { key: 'neutral', label: 'Neutral', color: '#f7f7f7' },
-  { key: 'democracy', label: 'Democracy', color: '#998ec3' },
+  { key: 'gamma', label: CATEGORY_CONFIG.gamma.label, color: CATEGORY_CONFIG.gamma.color },
+  { key: 'beta', label: CATEGORY_CONFIG.beta.label, color: CATEGORY_CONFIG.beta.color },
+  { key: 'alpha', label: CATEGORY_CONFIG.alpha.label, color: CATEGORY_CONFIG.alpha.color },
 ] as const;
 
 export function TimeSeriesChart({ data }: TimeSeriesChartProps) {
@@ -41,20 +42,20 @@ export function TimeSeriesChart({ data }: TimeSeriesChartProps) {
       .append('g')
       .attr('transform', `translate(0,${innerHeight})`)
       .call(d3.axisBottom(x).ticks(Math.min(maxStep + 1, 10)).tickFormat((value) => `${value}`))
-      .call((group) => group.selectAll('text').attr('fill', '#d9e2ec'))
-      .call((group) => group.selectAll('line,path').attr('stroke', '#6b7a8c'));
+      .call((group) => group.selectAll('text').attr('fill', '#50667f'))
+      .call((group) => group.selectAll('line,path').attr('stroke', '#9db1c8'));
 
     plot
       .append('g')
       .call(d3.axisLeft(y).ticks(5).tickFormat((value) => `${Math.round(Number(value) * 100)}%`))
-      .call((group) => group.selectAll('text').attr('fill', '#d9e2ec'))
-      .call((group) => group.selectAll('line,path').attr('stroke', '#6b7a8c'));
+      .call((group) => group.selectAll('text').attr('fill', '#50667f'))
+      .call((group) => group.selectAll('line,path').attr('stroke', '#9db1c8'));
 
     plot
       .append('g')
       .attr('class', 'chart-grid')
       .call(d3.axisLeft(y).tickSize(-innerWidth).tickFormat(() => ''))
-      .call((group) => group.selectAll('line').attr('stroke', 'rgba(202, 213, 225, 0.14)'))
+      .call((group) => group.selectAll('line').attr('stroke', 'rgba(96, 126, 163, 0.18)'))
       .call((group) => group.select('path').remove());
 
     const line = <K extends keyof TimeSeriesPoint>(key: K) =>
@@ -81,7 +82,7 @@ export function TimeSeriesChart({ data }: TimeSeriesChartProps) {
     seriesConfig.forEach((series, index) => {
       const row = legend.append('g').attr('transform', `translate(${index * 160}, 0)`);
       row.append('circle').attr('r', 5).attr('cx', 0).attr('cy', 0).attr('fill', series.color);
-      row.append('text').attr('x', 10).attr('y', 4).attr('fill', '#eef2f6').text(series.label);
+      row.append('text').attr('x', 10).attr('y', 4).attr('fill', '#30475f').text(series.label);
     });
   }, [data]);
 

@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import router
 
-app = FastAPI(title="dictatorship Moderator Simulation")
+app = FastAPI(title="Tri-Category Moderator Simulation")
 
 app.add_middleware(
     CORSMiddleware,

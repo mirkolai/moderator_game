@@ -44,7 +44,7 @@ class SimulationEngine:
                 GameLogic.time_series_point(
                     step=self.current_step,
                     node_states=self.node_states,
-                    tolerance=self.params.neutrality_tolerance,
+                    tolerance=self.params.center_tolerance,
                 )
             ]
             return self.get_summary()
@@ -59,13 +59,13 @@ class SimulationEngine:
 
     def _choose_post_type(self, state: float) -> PostType:
         weight = self.params.weight_state_influence_on_post_type
-        dictatorship_score = self.params.bias_dictatorship + weight * (1.0 - state)
-        democracy_score = self.params.bias_democracy + weight * state
-        neutral_score = self.params.bias_neutral + weight * max(0.0, 1.0 - abs(state - 0.5) * 2.0)
+        gamma_score = self.params.bias_gamma + weight * (1.0 - state)
+        alpha_score = self.params.bias_alpha + weight * state
+        beta_score = self.params.bias_beta + weight * max(0.0, 1.0 - abs(state - 0.5) * 2.0)
         options = [
-            (PostType.dictatorship, dictatorship_score),
-            (PostType.democracy, democracy_score),
-            (PostType.NEUTRAL, neutral_score),
+            (PostType.GAMMA, gamma_score),
+            (PostType.ALPHA, alpha_score),
+            (PostType.BETA, beta_score),
         ]
         total = sum(score for _, score in options)
         threshold = self._rng.random() * total
@@ -74,28 +74,28 @@ class SimulationEngine:
             cumulative += score
             if threshold <= cumulative:
                 return post_type
-        return PostType.NEUTRAL
+        return PostType.BETA
 
     def _type_influence(self, node_id: int, post_type: PostType) -> float:
-        if post_type == PostType.dictatorship:
+        if post_type == PostType.GAMMA:
             return -self.params.influence_strength
-        if post_type == PostType.democracy:
+        if post_type == PostType.ALPHA:
             return self.params.influence_strength
         return (0.5 - self.node_states[node_id]) * self.params.influence_strength * 0.45
 
     def _alignment_factor(self, state: float, post_type: PostType) -> float:
-        if post_type == PostType.dictatorship:
+        if post_type == PostType.GAMMA:
             return 1.5 - state
-        if post_type == PostType.democracy:
+        if post_type == PostType.ALPHA:
             return 0.5 + state
         return 1.0 - abs(state - 0.5)
 
     def _type_modifier(self, post_type: PostType) -> float:
-        if post_type == PostType.dictatorship:
-            return self.params.p_repost_dictatorship
-        if post_type == PostType.democracy:
-            return self.params.p_repost_democracy
-        return self.params.p_repost_neutral
+        if post_type == PostType.GAMMA:
+            return self.params.p_repost_gamma
+        if post_type == PostType.ALPHA:
+            return self.params.p_repost_alpha
+        return self.params.p_repost_beta
 
     def censor_posts(self, post_ids: list[str]) -> dict[str, Any]:
         with self._lock:
@@ -148,8 +148,8 @@ class SimulationEngine:
             if self._rng.random() <= self.params.p_add_edge:
                 self.graph.add_convergent_edge(
                     self.node_states,
-                    self.params.edge_addition_dictatorship_threshold,
-                    self.params.edge_addition_democracy_threshold,
+                    self.params.edge_addition_gamma_threshold,
+                    self.params.edge_addition_alpha_threshold,
                     self._rng,
                 )
             if self._rng.random() <= self.params.p_remove_edge:
@@ -170,7 +170,7 @@ class SimulationEngine:
                 GameLogic.time_series_point(
                     step=self.current_step,
                     node_states=self.node_states,
-                    tolerance=self.params.neutrality_tolerance,
+                    tolerance=self.params.center_tolerance,
                 )
             )
             self.outcome, self.message = GameLogic.evaluate(
@@ -191,7 +191,7 @@ class SimulationEngine:
                         "state": state,
                         "classification": GameLogic.classify_state(
                             state,
-                            self.params.neutrality_tolerance,
+                            self.params.center_tolerance,
                         ),
                     }
                     for node_id, state in enumerate(self.node_states)
@@ -224,9 +224,9 @@ class SimulationEngine:
                 "series": [
                     {
                         "step": point.step,
-                        "dictatorship": point.dictatorship,
-                        "democracy": point.democracy,
-                        "neutral": point.neutral,
+                        "alpha": point.alpha,
+                        "beta": point.beta,
+                        "gamma": point.gamma,
                     }
                     for point in self.timeline
                 ]
@@ -234,7 +234,7 @@ class SimulationEngine:
 
     def get_status(self) -> dict[str, Any]:
         with self._lock:
-            percentages = GameLogic.percentages(self.node_states, self.params.neutrality_tolerance)
+            percentages = GameLogic.percentages(self.node_states, self.params.center_tolerance)
             return {
                 "current_step": self.current_step,
                 "max_steps": self.params.election_step,

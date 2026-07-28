@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { api } from '../api/client';
+import { CATEGORY_CONFIG } from '../config/categories';
 import type {
   AppNotification,
   FeedResponse,
@@ -101,7 +102,7 @@ export function useSimulation() {
       await hydrate(api.startSimulation);
       await stepSimulation();
       addNotification(
-        'Each node is a citizen in the online community. Your mission is to defend democracy before election day. The simulation is already running: inspect feeds, highlight influence, and moderate strategically.',
+        `Each node is an animal in the online community. Your mission is to keep ${CATEGORY_CONFIG.alpha.label} ahead before bulldozers arrive. The simulation is already running: inspect feeds, highlight influence, and moderate strategically.`,
         1,
       );
     })();
@@ -169,7 +170,7 @@ export function useSimulation() {
     if (!firstPostNotifiedRef.current && currentStep >= 1) {
       firstPostNotifiedRef.current = true;
       addNotification(
-        'Citizens have started publishing content. Click a node to inspect its feed, then click a post to highlight influenced users. Use moderation actions carefully: every intervention can change election momentum.',
+        'Animals have started publishing content. Click a node to inspect its feed, then click a post to highlight influenced users. Use moderation actions carefully: every intervention can change animal opinion.',
         currentStep,
       );
     }
@@ -179,7 +180,7 @@ export function useSimulation() {
       if (hasRemoval) {
         firstEdgeRemovedNotifiedRef.current = true;
         addNotification(
-          'Some citizens are drifting apart ideologically. When opinions diverge enough, social ties can break and dashed links mark those disrupted relationships.',
+          'Some animals are drifting apart ideologically. When opinions diverge enough, social ties can break and dashed links mark those disrupted relationships.',
           currentStep,
         );
       }
@@ -190,7 +191,7 @@ export function useSimulation() {
       if (hasAddition) {
         firstEdgeAddedNotifiedRef.current = true;
         addNotification(
-          'Opinion convergence can also create new ties. Bold links indicate new relationships that can amplify either democratic or authoritarian narratives.',
+          'Opinion convergence can also create new ties. Bold links indicate new relationships that can amplify either high-end or low-end narrative streams.',
           currentStep,
         );
       }

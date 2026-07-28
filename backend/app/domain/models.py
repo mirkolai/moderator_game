@@ -5,9 +5,9 @@ from enum import Enum
 
 
 class PostType(str, Enum):
-    dictatorship = "dictatorship"
-    democracy = "democracy"
-    NEUTRAL = "neutral"
+    ALPHA = "alpha"
+    BETA = "beta"
+    GAMMA = "gamma"
 
 
 class PostStatus(str, Enum):
@@ -25,7 +25,7 @@ class Outcome(str, Enum):
 class PostRecord:
     id: str
     type: PostType
-    sub_type: str
+    content: str
     creator_node: int
     creation_step: int
     seen_by: set[int] = field(default_factory=set)
@@ -39,9 +39,9 @@ class PostRecord:
 @dataclass(slots=True)
 class TimeSeriesPoint:
     step: int
-    dictatorship: float
-    democracy: float
-    neutral: float
+    alpha: float
+    beta: float
+    gamma: float
 
 
 @dataclass(slots=True)
