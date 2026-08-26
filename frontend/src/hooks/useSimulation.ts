@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
-import { api } from '../api/client';
 import { CATEGORY_CONFIG } from '../config/categories';
+import { SimulationEngine } from '../simulation/engine';
 import type {
   AppNotification,
   FeedResponse,
@@ -23,6 +23,12 @@ function applySnapshot(snapshot: SnapshotResponse) {
 }
 
 export function useSimulation() {
+  const engineRef = useRef<SimulationEngine | null>(null);
+  if (engineRef.current === null) {
+    engineRef.current = new SimulationEngine();
+  }
+  const engine = engineRef.current;
+
   const [graph, setGraph] = useState<GraphState | null>(null);
   const [status, setStatus] = useState<StatusResponse | null>(null);
   const [parameters, setParameters] = useState<SimulationParameters | null>(null);
@@ -58,30 +64,29 @@ export function useSimulation() {
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
   };
 
-  const refreshSelectedFeed = async (nodeId: number | null) => {
+  const refreshSelectedFeed = (nodeId: number | null) => {
     if (nodeId === null) {
       setFeed(null);
       return;
     }
-    const nextFeed = await api.getFeed(nodeId);
-    setFeed(nextFeed);
+    setFeed(engine.getFeed(nodeId));
   };
 
-  const hydrate = async (
-    loader: () => Promise<SnapshotResponse>,
+  const hydrate = (
+    loader: () => SnapshotResponse,
     feedNodeId: number | null = selectedNodeIdRef.current,
-  ): Promise<SnapshotResponse | null> => {
+  ): SnapshotResponse | null => {
     setLoading(true);
     setError(null);
     try {
-      const snapshot = await loader();
+      const snapshot = loader();
       const next = applySnapshot(snapshot);
       setGraph(next.graph);
       setStatus(next.status);
       setParameters(next.parameters);
       setTimeSeries(next.timeSeries);
       if (feedNodeId !== null) {
-        await refreshSelectedFeed(feedNodeId);
+        refreshSelectedFeed(feedNodeId);
       }
       return snapshot;
     } catch (caughtError) {
@@ -98,14 +103,13 @@ export function useSimulation() {
     }
     hasInitializedRef.current = true;
 
-    void (async () => {
-      await hydrate(api.startSimulation);
-      await stepSimulation();
-      addNotification(
-        `Each node is an animal in the online community. Your mission is to keep ${CATEGORY_CONFIG.alpha.label} ahead before bulldozers arrive. The simulation is already running: inspect feeds, highlight influence, and moderate strategically.`,
-        1,
-      );
-    })();
+    hydrate(() => engine.reset());
+    void stepSimulation();
+    addNotification(
+      `Each node is an animal in the online community. Your mission is to keep ${CATEGORY_CONFIG.alpha.label} ahead before bulldozers arrive. The simulation is already running: inspect feeds, highlight influence, and moderate strategically.`,
+      1,
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const selectNode = async (nodeId: number | null) => {
@@ -122,8 +126,7 @@ export function useSimulation() {
     setHighlightedNodeIds([]);
     setHighlightedPostId(null);
     try {
-      const nextFeed = await api.getFeed(nodeId);
-      setFeed(nextFeed);
+      setFeed(engine.getFeed(nodeId));
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : 'Failed to load feed');
     }
@@ -132,7 +135,7 @@ export function useSimulation() {
   const highlightInfluence = async (post: PostRecord) => {
     setHighlightedPostId(post.id);
     try {
-      const influence = await api.getInfluence(post.id);
+      const influence = engine.getPostInfluence(post.id);
       setHighlightedNodeIds(influence.influenced_nodes);
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : 'Failed to load influence');
@@ -141,7 +144,7 @@ export function useSimulation() {
 
   const censorPost = async (postId: string) => {
     try {
-      const moderation = await api.censorPosts([postId]);
+      const moderation = engine.censorPosts([postId]);
       setStatus((current: StatusResponse | null) =>
         current
           ? {
@@ -151,7 +154,7 @@ export function useSimulation() {
           : current,
       );
       if (selectedNodeId !== null) {
-        await refreshSelectedFeed(selectedNodeId);
+        refreshSelectedFeed(selectedNodeId);
       }
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : 'Failed to moderate post');
@@ -160,7 +163,7 @@ export function useSimulation() {
 
   const stepSimulation = async () => {
     const prevKeys = prevEdgeKeysRef.current;
-    const snapshot = await hydrate(api.stepSimulation);
+    const snapshot = hydrate(() => engine.step());
     if (!snapshot) return;
 
     const currentStep = snapshot.status.current_step;
@@ -209,7 +212,7 @@ export function useSimulation() {
     firstEdgeRemovedNotifiedRef.current = false;
     firstEdgeAddedNotifiedRef.current = false;
     prevEdgeKeysRef.current = new Set();
-    await hydrate(api.resetSimulation, null);
+    hydrate(() => engine.reset(), null);
   };
 
   const updateParameters = async (nextParameters: SimulationParameters) => {
@@ -218,7 +221,7 @@ export function useSimulation() {
     setFeed(null);
     setHighlightedNodeIds([]);
     setHighlightedPostId(null);
-    await hydrate(() => api.updateParameters(nextParameters), null);
+    hydrate(() => engine.updateParameters(nextParameters), null);
     await stepSimulation();
   };
 

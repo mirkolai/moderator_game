@@ -1,74 +1,69 @@
 import os
 from PIL import Image
 
-def taglia_griglia_immagini(percorso_immagine, cartella_output):
+def split_image_grid(source_image_path, output_folder):
     """
-    Prende un'immagine 1500x1500px e la taglia in 900 immagini 50x50px,
-    salvandole nella cartella specificata.
+    Takes a 1500x1500px image and cuts it into 300 tiles of 50x50px,
+    saving them into the specified output folder.
     """
-    # Crea la cartella di destinazione se non esiste
-    if not os.path.exists(cartella_output):
-        os.makedirs(cartella_output)
+    # Create the destination folder if it does not exist
+    if not os.path.exists(output_folder):
+        os.makedirs(output_folder)
 
-    # Apre l'immagine sorgente
+    # Open the source image
     try:
-        img = Image.open(percorso_immagine)
+        img = Image.open(source_image_path)
     except FileNotFoundError:
-        print(f"Errore: Impossibile trovare l'immagine al percorso '{percorso_immagine}'.")
+        print(f"Error: could not find the image at path '{source_image_path}'.")
         return
 
-    # Dimensioni attese
+    # Expected dimensions
     tile_size = 51.15
-    righe = 15
-    colonne = 20
-    crop_margin = 3  # Numero di pixel da rimuovere da ogni lato del ritaglio   
+    rows = 15
+    columns = 20
+    crop_margin = 3  # Number of pixels to trim off each side of the crop
     count = 0
 
-    # Ciclo attraverso righe e colonne
-    for r in range(righe):
-        for c in range(colonne):
-            # Calcola le coordinate del riquadro di taglio: (left, top, right, bottom)
+    # Loop through rows and columns
+    for r in range(rows):
+        for c in range(columns):
+            # Compute the crop box coordinates: (left, top, right, bottom)
             left = c * tile_size
             top = r * tile_size
             right = left + tile_size
             bottom = top + tile_size
 
-            # Effettua il ritaglio
-            ritaglio = img.crop((left, top, right, bottom))
-              # Rimuove 2 pixel da ogni lato
-            ritaglio = img.crop((
+            # Trim a few pixels off each side of the crop
+            tile = img.crop((
                 left + crop_margin,
                 top + crop_margin,
                 right - crop_margin,
                 bottom - crop_margin
             ))
 
-            # Ridimensiona a 50x50 pixel
-            ritaglio = ritaglio.resize((50, 50), Image.Resampling.LANCZOS)
+            # Resize to 50x50 pixels
+            tile = tile.resize((50, 50), Image.Resampling.LANCZOS)
 
-            # Nome file formattato a 3 cifre (es. animale_001.png, animale_002.png...)
-            nome_file = f"animale_{count + 1:03d}.png"
-            percorso_salvataggio = os.path.join(cartella_output, nome_file)
+            # File name formatted with 3 digits (e.g. animal_001.png, animal_002.png...)
+            file_name = f"animal_{count + 1:03d}.png"
+            save_path = os.path.join(output_folder, file_name)
 
-
-
-            # Salva in formato PNG
-            ritaglio.save(percorso_salvataggio, "PNG")
+            # Save as PNG
+            tile.save(save_path, "PNG")
             count += 1
 
-    print(f"Operazione completata! Salvate {count} immagini in '{cartella_output}'.")
+    print(f"Done! Saved {count} images to '{output_folder}'.")
 
 if __name__ == "__main__":
+    # List files and folders in the current directory ('.')
+    entries = os.listdir('.')
 
+    print("Contents of the current folder:")
+    for entry in entries:
+        print(f"- {entry}")
 
-    # Ottiene la lista di file e cartelle nella directory corrente ('.')
-    elementi = os.listdir('.')
+    # Set the path to your downloaded sprite sheet image here
+    INPUT_IMAGE = "frontend/src/img/animal_grid.png"
+    OUTPUT_FOLDER = "frontend/src/img/animal_50x50"
 
-    print("Contenuto della cartella corrente:")
-    for elemento in elementi:
-        print(f"- {elemento}")
-    # Inserisci qui il nome o il percorso della tua immagine scaricata
-    IMMAGINE_INPUT = "backend/app/post/animal_grid.png" 
-    CARTELLA_DESTINAZIONE = "backend/app/post/animal_50x50"
-
-    taglia_griglia_immagini(IMMAGINE_INPUT, CARTELLA_DESTINAZIONE)
+    split_image_grid(INPUT_IMAGE, OUTPUT_FOLDER)
