@@ -1,14 +1,19 @@
 import { useEffect, useMemo, useRef } from 'react';
 import * as d3 from 'd3';
 
+import { getAnimalImageForNode } from '../config/animals';
 import { CATEGORY_CONFIG } from '../config/categories';
 import type { EdgeDatum, GraphState, NodeDatum } from '../types';
+
+// Fraction of the node radius occupied by the animal image.
+// This leaves a visible category-colored ring around the avatar.
+const AVATAR_INSET = 0.82;
 
 interface NetworkGraphProps {
   graph: GraphState | null;
   selectedNodeId: number | null;
   highlightedNodeIds: number[];
-  onSelectNode: (nodeId: number) => void;
+  onSelectNode: (nodeId: number | null) => void;
 }
 
 type SimNode = d3.SimulationNodeDatum & NodeDatum;
@@ -23,15 +28,6 @@ interface RenderLinkDatum {
   change: EdgeChange;
 }
 
-const animalImageModules = import.meta.glob('../img/animal_50x50/*.png', {
-  eager: true,
-  import: 'default',
-}) as Record<string, string>;
-
-const animalImages = Object.entries(animalImageModules)
-  .sort(([leftPath], [rightPath]) => leftPath.localeCompare(rightPath))
-  .map(([, imageSrc]) => imageSrc);
-
 function edgeKey(source: number, target: number): string {
   return `${source}-${target}`;
 }
@@ -41,55 +37,91 @@ function formatNodeAlignment(node: NodeDatum): string {
   return `Node ${node.id} | Alignment: ${alignment} | Category: ${node.classification}`;
 }
 
-function getNodeImage(nodeId: number): string | null {
-  if (animalImages.length === 0) {
-    return null;
-  }
-  const imageIndex = ((nodeId - 1) % animalImages.length + animalImages.length) % animalImages.length;
-  return animalImages[imageIndex];
-}
-
-export function NetworkGraph({ graph, selectedNodeId, highlightedNodeIds, onSelectNode }: NetworkGraphProps) {
+export function NetworkGraph({
+  graph,
+  selectedNodeId,
+  highlightedNodeIds,
+  onSelectNode,
+}: NetworkGraphProps) {
   const svgRef = useRef<SVGSVGElement | null>(null);
-  const highlightedSet = useMemo(() => new Set(highlightedNodeIds), [highlightedNodeIds]);
 
-  const nodeColor = (node: SimNode) => {
-    if (node.classification === 'gamma') return CATEGORY_CONFIG.gamma.color;
-    if (node.classification === 'alpha') return CATEGORY_CONFIG.alpha.color;
+  const highlightedSet = useMemo(
+    () => new Set(highlightedNodeIds),
+    [highlightedNodeIds],
+  );
+
+  const nodeColor = (node: SimNode): string => {
+    if (node.classification === 'gamma') {
+      return CATEGORY_CONFIG.gamma.color;
+    }
+
+    if (node.classification === 'alpha') {
+      return CATEGORY_CONFIG.alpha.color;
+    }
+
     return CATEGORY_CONFIG.beta.color;
   };
 
-  // Compute neighbors of selected node for visibility control
+  // ---------------------------------------------------------------------------
+  // Selected node neighbors
+  // ---------------------------------------------------------------------------
+
   const selectedNodeNeighbors = useMemo(() => {
-    if (selectedNodeId === null || !graph) return new Set<number>();
-    const neighbors = new Set<number>();
-    neighbors.add(selectedNodeId); // Include the node itself
-    for (const edge of graph.edges) {
-      if (edge.source === selectedNodeId) neighbors.add(edge.target);
-      if (edge.target === selectedNodeId) neighbors.add(edge.source);
+    if (selectedNodeId === null || !graph) {
+      return new Set<number>();
     }
+
+    const neighbors = new Set<number>();
+
+    // Include the selected node itself.
+    neighbors.add(selectedNodeId);
+
+    for (const edge of graph.edges) {
+      if (edge.source === selectedNodeId) {
+        neighbors.add(edge.target);
+      }
+
+      if (edge.target === selectedNodeId) {
+        neighbors.add(edge.source);
+      }
+    }
+
     return neighbors;
   }, [selectedNodeId, graph]);
 
-  // Refs that survive re-renders without triggering effects
+  // ---------------------------------------------------------------------------
+  // Persistent refs
+  // ---------------------------------------------------------------------------
+
   const simRef = useRef<d3.Simulation<SimNode, SimLink> | null>(null);
+
   const nodesRef = useRef<SimNode[]>([]);
-  const nodeSelRef = useRef<d3.Selection<SVGGElement, SimNode, SVGGElement, null> | null>(null);
+
+  const nodeSelRef = useRef<
+    d3.Selection<SVGGElement, SimNode, SVGGElement, null> | null
+  >(null);
+
   const prevStepRef = useRef<number | null>(null);
+
   const prevEdgesRef = useRef<Map<string, EdgeDatum>>(new Map());
+
   const removedForStepRef = useRef<Map<string, EdgeDatum>>(new Map());
 
-  // Keep the callback always fresh without adding it to effect deps
+  // Keep callback fresh without forcing the graph effect to rerun.
   const onSelectRef = useRef(onSelectNode);
   onSelectRef.current = onSelectNode;
 
-  // Zoom behavior and last known transform – persisted across steps
+  // Zoom state survives graph updates.
   const zoomRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null);
-  const zoomTransformRef = useRef<d3.ZoomTransform>(d3.zoomIdentity);
 
-  // ── Effect 1: graph topology ────────────────────────────────────────────────
-  // Runs only when the graph data changes (step advance / edge add-remove / reset).
-  // selectedNodeId and highlightedSet are intentionally excluded from the deps.
+  const zoomTransformRef = useRef<d3.ZoomTransform>(
+    d3.zoomIdentity,
+  );
+
+  // ===========================================================================
+  // EFFECT 1 — GRAPH / TOPOLOGY / SIMULATION
+  // ===========================================================================
+
   useEffect(() => {
     if (!graph || !svgRef.current) {
       return;
@@ -97,42 +129,83 @@ export function NetworkGraph({ graph, selectedNodeId, highlightedNodeIds, onSele
 
     const width = 920;
     const height = 520;
+
     const svg = d3.select(svgRef.current);
+
     svg.attr('viewBox', `0 0 ${width} ${height}`);
 
-    // Preserve existing positions so nodes don't jump on each step
-    const prevById = new Map(nodesRef.current.map((n) => [n.id, n]));
+    // -------------------------------------------------------------------------
+    // Preserve node positions between simulation steps
+    // -------------------------------------------------------------------------
+
+    const prevById = new Map(
+      nodesRef.current.map((node) => [node.id, node]),
+    );
+
     const nodes: SimNode[] = graph.nodes.map((node) => {
-      const prev = prevById.get(node.id);
+      const previous = prevById.get(node.id);
+
       return {
         ...node,
-        x: prev?.x ?? width / 2 + (Math.random() - 0.5) * 100,
-        y: prev?.y ?? height / 2 + (Math.random() - 0.5) * 100,
+
+        x:
+          previous?.x ??
+          width / 2 + (Math.random() - 0.5) * 100,
+
+        y:
+          previous?.y ??
+          height / 2 + (Math.random() - 0.5) * 100,
       };
     });
+
     nodesRef.current = nodes;
 
-    const links: SimLink[] = graph.edges.map((edge) => ({ ...edge }));
+    const links: SimLink[] = graph.edges.map((edge) => ({
+      ...edge,
+    }));
+
+    // -------------------------------------------------------------------------
+    // Detect edge changes
+    // -------------------------------------------------------------------------
 
     let newEdgeKeys = new Set<string>();
-    let removedThisStep = removedForStepRef.current;
-    const currentEdgesByKey = new Map(graph.edges.map((edge) => [edgeKey(edge.source, edge.target), edge]));
 
-    // Compute edge diff only when the simulation moves forward.
-    // On reset (step goes back to 0 or decreases), clear transient edge styles.
-    if (prevStepRef.current !== null && graph.step !== prevStepRef.current) {
-      const isReset = graph.step === 0 || graph.step < prevStepRef.current;
+    let removedThisStep = removedForStepRef.current;
+
+    const currentEdgesByKey = new Map<string, EdgeDatum>(
+      graph.edges.map((edge) => [
+        edgeKey(edge.source, edge.target),
+        edge,
+      ]),
+    );
+
+    if (
+      prevStepRef.current !== null &&
+      graph.step !== prevStepRef.current
+    ) {
+      const isReset =
+        graph.step === 0 ||
+        graph.step < prevStepRef.current;
+
       if (isReset) {
         newEdgeKeys = new Set();
+
         removedThisStep = new Map();
+
         removedForStepRef.current = removedThisStep;
       } else {
         newEdgeKeys = new Set(
-          [...currentEdgesByKey.keys()].filter((key) => !prevEdgesRef.current.has(key)),
+          [...currentEdgesByKey.keys()].filter(
+            (key) => !prevEdgesRef.current.has(key),
+          ),
         );
+
         removedThisStep = new Map(
-          [...prevEdgesRef.current.entries()].filter(([key]) => !currentEdgesByKey.has(key)),
+          [...prevEdgesRef.current.entries()].filter(
+            ([key]) => !currentEdgesByKey.has(key),
+          ),
         );
+
         removedForStepRef.current = removedThisStep;
       }
     }
@@ -140,7 +213,11 @@ export function NetworkGraph({ graph, selectedNodeId, highlightedNodeIds, onSele
     const renderLinks: RenderLinkDatum[] = [
       ...graph.edges.map((edge) => {
         const key = edgeKey(edge.source, edge.target);
-        const change: EdgeChange = newEdgeKeys.has(key) ? 'new' : 'normal';
+
+        const change: EdgeChange = newEdgeKeys.has(key)
+          ? 'new'
+          : 'normal';
+
         return {
           key,
           sourceId: edge.source,
@@ -148,6 +225,7 @@ export function NetworkGraph({ graph, selectedNodeId, highlightedNodeIds, onSele
           change,
         };
       }),
+
       ...[...removedThisStep.entries()].map(([key, edge]) => ({
         key,
         sourceId: edge.source,
@@ -156,20 +234,56 @@ export function NetworkGraph({ graph, selectedNodeId, highlightedNodeIds, onSele
       })),
     ];
 
-    // ── Degree-based radius ──────────────────────────────────────────────────
-    const degreeMap = new Map<number, number>();
-    for (const edge of graph.edges) {
-      degreeMap.set(edge.source, (degreeMap.get(edge.source) ?? 0) + 1);
-      degreeMap.set(edge.target, (degreeMap.get(edge.target) ?? 0) + 1);
-    }
-    const maxDegree = Math.max(1, ...degreeMap.values());
-    // sqrt scale → area proportional to degree, not radius
-    const radiusScale = d3.scaleSqrt().domain([0, maxDegree]).range([9, 26]);
-    const nodeRadius = (id: number) => radiusScale(degreeMap.get(id) ?? 0);
+    // =========================================================================
+    // DEGREE
+    // =========================================================================
 
-    const defs = svg.selectAll('defs').data([null]).join('defs');
+    const degreeMap = new Map<number, number>();
+
+    for (const node of graph.nodes) {
+      degreeMap.set(node.id, 0);
+    }
+
+    for (const edge of graph.edges) {
+      degreeMap.set(
+        edge.source,
+        (degreeMap.get(edge.source) ?? 0) + 1,
+      );
+
+      degreeMap.set(
+        edge.target,
+        (degreeMap.get(edge.target) ?? 0) + 1,
+      );
+    }
+
+    const maxDegree = Math.max(
+      1,
+      ...degreeMap.values(),
+    );
+
+    const radiusScale = d3
+      .scaleSqrt<number, number>()
+      .domain([0, maxDegree])
+      .range([8, 30])
+      .clamp(true);
+
+    const nodeRadius = (nodeId: number): number => {
+      return radiusScale(
+        degreeMap.get(nodeId) ?? 0,
+      );
+    };
+
+    // =========================================================================
+    // SVG DEFS & LAYERS
+    // =========================================================================
+
+    const defs = svg
+      .selectAll<SVGDefsElement, null>('defs')
+      .data([null])
+      .join('defs');
+
     defs
-      .selectAll('#arrowhead')
+      .selectAll<SVGMarkerElement, null>('#arrowhead')
       .data(graph.directed ? [null] : [])
       .join(
         (enter) =>
@@ -177,7 +291,6 @@ export function NetworkGraph({ graph, selectedNodeId, highlightedNodeIds, onSele
             .append('marker')
             .attr('id', 'arrowhead')
             .attr('viewBox', '0 -5 10 10')
-            // refX ≈ max node radius + arrow tip length so arrow stops at node edge
             .attr('refX', 32)
             .attr('refY', 0)
             .attr('markerWidth', 6)
@@ -186,142 +299,248 @@ export function NetworkGraph({ graph, selectedNodeId, highlightedNodeIds, onSele
             .append('path')
             .attr('fill', '#8b949e')
             .attr('d', 'M0,-5L10,0L0,5'),
+
         (update) => update,
+
         (exit) => exit.remove(),
       );
 
-    const root = svg.selectAll<SVGGElement, null>('g.scene').data([null]).join('g').attr('class', 'scene');
-    const linkLayer = root.selectAll<SVGGElement, null>('g.links').data([null]).join('g').attr('class', 'links');
-    const nodeLayer = root.selectAll<SVGGElement, null>('g.nodes').data([null]).join('g').attr('class', 'nodes');
-    const tooltip = d3
-      .select('body')
-      .selectAll<HTMLDivElement, null>('div.graph-node-tooltip')
+    const root = svg
+      .selectAll<SVGGElement, null>('g.scene')
       .data([null])
-      .join('div')
-      .attr('class', 'graph-node-tooltip')
-      .style('display', 'none');
+      .join('g')
+      .attr('class', 'scene');
 
-    const positionTooltip = (event: MouseEvent) => {
-      const offset = 14;
-      const tooltipNode = tooltip.node();
-      if (!tooltipNode) return;
+    const linkLayer = root
+      .selectAll<SVGGElement, null>('g.links')
+      .data([null])
+      .join('g')
+      .attr('class', 'links');
 
-      const tooltipRect = tooltipNode.getBoundingClientRect();
-      const maxLeft = Math.max(8, window.innerWidth - tooltipRect.width - 8);
-      const maxTop = Math.max(8, window.innerHeight - tooltipRect.height - 8);
-      const left = Math.min(maxLeft, event.clientX + offset);
-      const top = Math.min(maxTop, event.clientY + offset);
+    const nodeLayer = root
+      .selectAll<SVGGElement, null>('g.nodes')
+      .data([null])
+      .join('g')
+      .attr('class', 'nodes');
 
-      tooltip.style('left', `${left}px`).style('top', `${top}px`);
-    };
-
-    const showTooltip = (event: MouseEvent, node: SimNode) => {
-      const imageSrc = getNodeImage(node.id);
-      const tooltipText = formatNodeAlignment(node);
-      const imageMarkup = imageSrc
-        ? `<img class="graph-node-tooltip__image" src="${imageSrc}" alt="Animal avatar for node ${node.id}" />`
-        : '';
-
-      tooltip
-        .html(`<div class="graph-node-tooltip__text">${tooltipText}</div>${imageMarkup}`)
-        .style('display', 'flex')
-        .style('opacity', 1);
-
-      positionTooltip(event);
-    };
-
-    const hideTooltip = () => {
-      tooltip.style('display', 'none').style('opacity', 0);
-    };
-
-    // Click on empty SVG area to deselect
     svg.on('click', (event: MouseEvent) => {
-      // Only deselect if clicking on the SVG background, not on nodes/elements
       if (event.target === svgRef.current) {
-        onSelectRef.current(null as any);
+        onSelectRef.current(null);
       }
     });
 
-    // Links – slow fade-in for new edges, fade-out for removed ones
+    // =========================================================================
+    // LINKS
+    // =========================================================================
+
     const linkSelection = linkLayer
       .selectAll<SVGLineElement, RenderLinkDatum>('line')
-      .data(renderLinks, (link) => link.key)
+      .data(
+        renderLinks,
+        (link) => link.key,
+      )
       .join(
         (enter) =>
           enter
             .append('line')
             .attr('class', 'graph-link')
-            .attr('stroke', (link) => (link.change === 'removed' ? '#ff9a8f' : link.change === 'new' ? '#ffd166' : '#93a1b1'))
+            .attr('stroke', (link) => {
+              if (link.change === 'removed') return '#ff9a8f';
+              if (link.change === 'new') return '#ffd166';
+              return '#93a1b1';
+            })
             .attr('stroke-opacity', 0)
-            .attr('stroke-width', (link) => (link.change === 'new' ? 3.2 : link.change === 'removed' ? 2.6 : 1.4))
-            .attr('stroke-dasharray', (link) => (link.change === 'removed' ? '8 6' : null))
+            .attr('stroke-width', (link) => {
+              if (link.change === 'new') return 3.2;
+              if (link.change === 'removed') return 2.6;
+              return 1.4;
+            })
+            .attr('stroke-dasharray', (link) =>
+              link.change === 'removed' ? '8 6' : null,
+            )
             .attr('marker-end', (link) =>
-              graph.directed && link.change !== 'removed' ? 'url(#arrowhead)' : null,
+              graph.directed && link.change !== 'removed'
+                ? 'url(#arrowhead)'
+                : null,
             )
             .call((selection) =>
               selection
                 .transition()
                 .duration(700)
-                .attr('stroke-opacity', (link) => (link.change === 'new' ? 0.9 : link.change === 'removed' ? 0.78 : 0.56)),
+                .attr('stroke-opacity', (link) => {
+                  if (link.change === 'new') return 0.9;
+                  if (link.change === 'removed') return 0.78;
+                  return 0.56;
+                }),
             ),
+
         (update) =>
           update.call((selection) =>
             selection
+              .interrupt()
               .transition()
               .duration(500)
-              .attr('stroke', (link) =>
-                link.change === 'removed' ? '#ff9a8f' : link.change === 'new' ? '#ffd166' : '#93a1b1',
+              .attr('stroke', (link) => {
+                if (link.change === 'removed') return '#ff9a8f';
+                if (link.change === 'new') return '#ffd166';
+                return '#93a1b1';
+              })
+              .attr('stroke-width', (link) => {
+                if (link.change === 'new') return 3.2;
+                if (link.change === 'removed') return 2.6;
+                return 1.4;
+              })
+              .attr('stroke-dasharray', (link) =>
+                link.change === 'removed' ? '8 6' : null,
               )
-              .attr('stroke-width', (link) => (link.change === 'new' ? 3.2 : link.change === 'removed' ? 2.6 : 1.4))
-              .attr('stroke-dasharray', (link) => (link.change === 'removed' ? '8 6' : null))
-              .attr('stroke-opacity', (link) => (link.change === 'new' ? 0.9 : link.change === 'removed' ? 0.78 : 0.56))
+              .attr('stroke-opacity', (link) => {
+                if (link.change === 'new') return 0.9;
+                if (link.change === 'removed') return 0.78;
+                return 0.56;
+              })
               .attr('marker-end', (link) =>
-                graph.directed && link.change !== 'removed' ? 'url(#arrowhead)' : null,
+                graph.directed && link.change !== 'removed'
+                  ? 'url(#arrowhead)'
+                  : null,
               ),
           ),
-        (exit) => exit.call((selection) => selection.transition().duration(400).attr('stroke-opacity', 0).remove()),
+
+        (exit) =>
+          exit.call((selection) =>
+            selection
+              .interrupt()
+              .transition()
+              .duration(400)
+              .attr('stroke-opacity', 0)
+              .remove(),
+          ),
       );
+
+    // =========================================================================
+    // NODES
+    // =========================================================================
 
     const nodeSelection = nodeLayer
       .selectAll<SVGGElement, SimNode>('g.node')
-      .data(nodes, (node) => node.id)
+      .data(
+        nodes,
+        (node) => node.id,
+      )
       .join(
         (enter) => {
-          const group = enter.append('g').attr('class', 'node').style('cursor', 'pointer').attr('opacity', 0);
-          group.append('circle').attr('r', (node) => nodeRadius(node.id)).attr('stroke-width', 2.5);
+          const group = enter
+            .append('g')
+            .attr('class', 'node')
+            .style('cursor', 'pointer')
+            .attr('opacity', 0);
+
+          // 1. Cerchio di sfondo BIANCO per mascherare gli archi sotto il nodo
           group
-            .append('text')
-            .attr('text-anchor', 'middle')
-            .attr('dy', 4)
-            .attr('class', 'node-label')
-            .text((node) => node.id);
-          group.call((selection) => selection.transition().duration(500).attr('opacity', 1));
+            .append('circle')
+            .attr('class', 'node-bg')
+            .attr('fill', '#ffffff');
+
+          // 2. Cerchio colorato della categoria
+          group
+            .append('circle')
+            .attr('class', 'node-main')
+            .attr('stroke-width', 2.5);
+
+          // 3. Avatar clip path
+          group
+            .append('clipPath')
+            .attr('id', (node) => `node-clip-${node.id}`)
+            .append('circle')
+            .attr(
+              'r',
+              (node) => nodeRadius(node.id) * AVATAR_INSET,
+            );
+
+          // 4. Immagine dell'animale
+          group
+            .append('image')
+            .attr('class', 'node-avatar')
+            .attr('href', (node) => getAnimalImageForNode(node.id))
+            .attr('clip-path', (node) => `url(#node-clip-${node.id})`)
+            .attr('x', (node) => -nodeRadius(node.id) * AVATAR_INSET)
+            .attr('y', (node) => -nodeRadius(node.id) * AVATAR_INSET)
+            .attr('width', (node) => nodeRadius(node.id) * AVATAR_INSET * 2)
+            .attr('height', (node) => nodeRadius(node.id) * AVATAR_INSET * 2)
+            .attr('preserveAspectRatio', 'xMidYMid slice')
+            .style('pointer-events', 'none');
+
+          // Tooltip
+          group.append('title').text((node) => formatNodeAlignment(node));
+
+          group
+            .transition()
+            .duration(500)
+            .attr('opacity', 1);
+
           return group;
         },
+
         (update) => update,
-        (exit) => exit.call((selection) => selection.transition().duration(200).attr('opacity', 0).remove()),
+
+        (exit) =>
+          exit.call((selection) =>
+            selection
+              .interrupt()
+              .transition()
+              .duration(200)
+              .attr('opacity', 0)
+              .remove(),
+          ),
       )
       .on('click', (_, node) => {
-        // Toggle selection: if already selected, deselect
         if (selectedNodeId === node.id) {
-          onSelectRef.current(null as any);
+          onSelectRef.current(null);
         } else {
           onSelectRef.current(node.id);
         }
-      })
-      .on('mouseenter', (event, node) => showTooltip(event, node))
-      .on('mousemove', (event, node) => showTooltip(event, node))
-      .on('mouseleave', hideTooltip);
+      });
 
-    // Update fill (state color) and radius; stroke is owned by Effect 2
+    // =========================================================================
+    // NODE TOOLTIP & GEOMETRY
+    // =========================================================================
+
     nodeSelection
-      .select('circle')
-      .transition()
-      .duration(600)
+      .select('title')
+      .text((node) => formatNodeAlignment(node));
+
+    // Sincronizzazione raggio cerchio bianco di sfondo
+    nodeSelection
+      .select<SVGCircleElement>('circle.node-bg')
+      .interrupt()
+      .attr('r', (node) => nodeRadius(node.id));
+
+    // Sincronizzazione raggio cerchio categoria
+    nodeSelection
+      .select<SVGCircleElement>('circle.node-main')
+      .interrupt()
       .attr('r', (node) => nodeRadius(node.id))
       .attr('fill', (node) => nodeColor(node));
 
+    // Sincronizzazione clipPath
+    nodeSelection
+      .select<SVGCircleElement>('clipPath circle')
+      .interrupt()
+      .attr('r', (node) => nodeRadius(node.id) * AVATAR_INSET);
+
+    // Sincronizzazione immagine avatar
+    nodeSelection
+      .select<SVGImageElement>('image.node-avatar')
+      .interrupt()
+      .attr('x', (node) => -nodeRadius(node.id) * AVATAR_INSET)
+      .attr('y', (node) => -nodeRadius(node.id) * AVATAR_INSET)
+      .attr('width', (node) => nodeRadius(node.id) * AVATAR_INSET * 2)
+      .attr('height', (node) => nodeRadius(node.id) * AVATAR_INSET * 2);
+
     nodeSelRef.current = nodeSelection;
+
+    // =========================================================================
+    // DRAG / SIMULATION / ZOOM
+    // =========================================================================
 
     const drag = d3
       .drag<SVGGElement, SimNode>()
@@ -346,48 +565,52 @@ export function NetworkGraph({ graph, selectedNodeId, highlightedNodeIds, onSele
 
     nodeSelection.call(drag);
 
-    // Stop the previous simulation before building a new one
     simRef.current?.stop();
 
     const simulation = d3
-      .forceSimulation(nodes)
-      .force('link', d3.forceLink<SimNode, SimLink>(links).id((node) => node.id).distance(90).strength(0.22))
-      .force('charge', d3.forceManyBody().strength(-170))
-      // Weak center strength: avoids yanking nodes to the middle
+      .forceSimulation<SimNode>(nodes)
+      .force(
+        'link',
+        d3
+          .forceLink<SimNode, SimLink>(links)
+          .id((node) => node.id)
+          .distance(90)
+          .strength(0.22),
+      )
+      .force('charge', d3.forceManyBody<SimNode>().strength(-170))
       .force('center', d3.forceCenter(width / 2, height / 2).strength(0.03))
-      .force('collision', d3.forceCollide((node) => nodeRadius((node as SimNode).id) + 4))
-      // Low alpha + slower decay → gentle drift, not a full re-layout
+      .force(
+        'collision',
+        d3.forceCollide<SimNode>((node) => nodeRadius(node.id) + 4),
+      )
       .alpha(0.18)
       .alphaDecay(0.035);
 
     simRef.current = simulation;
 
-    // ── Zoom & pan ───────────────────────────────────────────────────────────
-    // Created once; subsequent graph updates re-attach without resetting transform.
     if (!zoomRef.current) {
       const zoom = d3
         .zoom<SVGSVGElement, unknown>()
         .scaleExtent([0.15, 6])
         .on('zoom', (event: d3.D3ZoomEvent<SVGSVGElement, unknown>) => {
           zoomTransformRef.current = event.transform;
-          // Always target the current g.scene, whatever step we are on
           svg.select<SVGGElement>('g.scene').attr('transform', event.transform.toString());
         });
+
       zoomRef.current = zoom;
       svg.call(zoom);
-      // Double-click on empty SVG background resets zoom
+
       svg.on('dblclick.zoom', () => {
         svg.transition().duration(500).call(zoom.transform, d3.zoomIdentity);
       });
     } else {
-      // Re-attach (idempotent) and restore the saved camera position
       svg.call(zoomRef.current);
       svg.call(zoomRef.current.transform, zoomTransformRef.current);
     }
-    // On a full reset (step 0) snap back to identity
+
     if (graph.step === 0) {
       zoomTransformRef.current = d3.zoomIdentity;
-      svg.call(zoomRef.current.transform, d3.zoomIdentity);
+      svg.call(zoomRef.current!.transform, d3.zoomIdentity);
     }
 
     simulation.on('tick', () => {
@@ -399,56 +622,110 @@ export function NetworkGraph({ graph, selectedNodeId, highlightedNodeIds, onSele
         .attr('x2', (link) => nodeById.get(link.targetId)?.x ?? 0)
         .attr('y2', (link) => nodeById.get(link.targetId)?.y ?? 0);
 
-      // nodeSelRef always points at the latest selection, so the tick stays valid
-      nodeSelRef.current?.attr('transform', (node) => `translate(${node.x ?? 0}, ${node.y ?? 0})`);
+      nodeSelRef.current?.attr(
+        'transform',
+        (node) => `translate(${node.x ?? 0}, ${node.y ?? 0})`,
+      );
     });
 
     prevStepRef.current = graph.step;
     prevEdgesRef.current = currentEdgesByKey;
 
     return () => {
-      hideTooltip();
       simulation.stop();
+      linkSelection.interrupt();
+      nodeSelection.interrupt();
+      nodeSelection.select('circle.node-main').interrupt();
+      nodeSelection.select('circle.node-bg').interrupt();
+      nodeSelection.select('clipPath circle').interrupt();
+      nodeSelection.select('image.node-avatar').interrupt();
     };
-  }, [graph]); // ← graph only; selection state never triggers a layout reset
+  }, [graph]);
 
-  // ── Effect 2: selection + highlight ────────────────────────────────────────
-  // Only updates stroke/glow style and opacity. The simulation is never touched here.
+  // ===========================================================================
+  // EFFECT 2 — SELECTION / HIGHLIGHT
+  // ===========================================================================
+
   useEffect(() => {
-    nodeSelRef.current?.attr('opacity', (node) => {
-      // If a node is selected and this node is not a neighbor, dim it
-      if (selectedNodeId !== null && !selectedNodeNeighbors.has(node.id)) {
+    const selection = nodeSelRef.current;
+
+    if (!selection) {
+      return;
+    }
+
+    // Mantieni il contenitore principale g.node sempre opaco a 1
+    selection.attr('opacity', 1);
+
+    // Calcolo dell'opacità per i soli elementi in primo piano
+    const getForegroundOpacity = (node: SimNode) => {
+      if (
+        selectedNodeId !== null &&
+        !selectedNodeNeighbors.has(node.id)
+      ) {
         return 0.25;
       }
       return 1;
-    });
+    };
 
-    // Update fill color immediately (no transition) to ensure colors are always correct
-    nodeSelRef.current
-      ?.select('circle')
+    // Applica l'opacità al cerchio categoria e all'avatar, lasciando il fondo bianco solido
+    selection
+      .select('circle.node-main')
+      .attr('opacity', (node) => getForegroundOpacity(node));
+
+    selection
+      .select('image.node-avatar')
+      .attr('opacity', (node) => getForegroundOpacity(node));
+
+    // -------------------------------------------------------------------------
+    // Fill
+    // -------------------------------------------------------------------------
+
+    selection
+      .select('circle.node-main')
       .attr('fill', (node) => nodeColor(node));
 
-    // Update stroke and other visual properties with transition
-    nodeSelRef.current
-      ?.select('circle')
+    // -------------------------------------------------------------------------
+    // Stroke / highlight
+    // -------------------------------------------------------------------------
+
+    selection
+      .select('circle.node-main')
+      .interrupt()
       .transition()
       .duration(200)
       .attr('stroke', (node) => {
-        if (selectedNodeId === node.id) return '#f3f6f8';
-        if (highlightedSet.has(node.id)) return '#ffce73';
+        if (selectedNodeId === node.id) {
+          return '#f3f6f8';
+        }
+        if (highlightedSet.has(node.id)) {
+          return '#ffce73';
+        }
         return '#17212b';
       })
       .attr('stroke-width', (node) =>
-        selectedNodeId === node.id || highlightedSet.has(node.id) ? 4 : 2.5,
+        selectedNodeId === node.id || highlightedSet.has(node.id)
+          ? 4
+          : 2.5,
       )
       .attr('filter', (node) =>
-        highlightedSet.has(node.id) ? 'drop-shadow(0 0 12px rgba(255, 206, 115, 0.65))' : null,
+        highlightedSet.has(node.id)
+          ? 'drop-shadow(0 0 3px rgba(255, 206, 115, 0.85))'
+          : null,
       );
   }, [selectedNodeId, highlightedSet, selectedNodeNeighbors]);
 
+  // ===========================================================================
+  // RENDER
+  // ===========================================================================
+
   return (
     <section className="card graph-panel">
-      <svg ref={svgRef} className="graph-svg" role="img" aria-label="Simulation network graph" />
+      <svg
+        ref={svgRef}
+        className="graph-svg"
+        role="img"
+        aria-label="Simulation network graph"
+      />
     </section>
   );
 }

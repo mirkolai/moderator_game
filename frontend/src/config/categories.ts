@@ -11,7 +11,7 @@ export interface CategoryConfigEntry {
 export const CATEGORY_CONFIG: Record<CategoryKey, CategoryConfigEntry> = {
   alpha: {
     key: 'alpha',
-    label: 'Uncaged',
+    label: 'Pro Forest',
     cssToken: 'alpha',
     color: '#4e79a7',
   },
@@ -23,7 +23,7 @@ export const CATEGORY_CONFIG: Record<CategoryKey, CategoryConfigEntry> = {
   },
   gamma: {
     key: 'gamma',
-    label: 'Tamed',
+    label: 'Pro Zoo',
     cssToken: 'gamma',
     color: '#f28e2b',
   },

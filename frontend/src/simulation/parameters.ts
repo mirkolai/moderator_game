@@ -50,7 +50,7 @@ export const DEFAULT_PARAMETERS: SimulationParameters = {
 
   election_step: 20,
   win_threshold: 0.8,
-  center_tolerance: 0.5,
+  center_tolerance: 0.17,
 };
 
 /** Clamps every field of a partial parameter update to its valid range. */

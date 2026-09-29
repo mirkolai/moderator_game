@@ -1,10 +1,14 @@
-import type { MouseEvent } from 'react';
+import { useEffect, useMemo, useRef, type MouseEvent } from 'react';
 
-import type { FeedResponse, PostRecord } from '../types';
+import { getAnimalImageForNode } from '../config/animals';
+import { CATEGORY_CONFIG } from '../config/categories';
+import type { FeedResponse, GraphState, PostRecord } from '../types';
 
 interface FeedPanelProps {
   feed: FeedResponse | null;
+  graph?: GraphState | null; // Prop per calcolare il grado dei nodi
   selectedNodeId: number | null;
+  selectedNodeState: number | null;
   highlightedPostId: string | null;
   currentStep: number;
   censorshipActionsRemaining: number;
@@ -14,25 +18,91 @@ interface FeedPanelProps {
 
 export function FeedPanel({
   feed,
+  graph = null,
   selectedNodeId,
+  selectedNodeState,
   highlightedPostId,
   currentStep,
   censorshipActionsRemaining,
   onHighlightPost,
   onCensorPost,
 }: FeedPanelProps) {
+  const postListRef = useRef<HTMLDivElement | null>(null);
   const feedOwnerId = selectedNodeId ?? feed?.node_id ?? null;
-  const visiblePosts =
-    feed === null || feedOwnerId === null
-      ? []
-      : feed.posts.filter((post) => post.creator_node !== feedOwnerId);
+
+  // Calcola il grado (numero di connessioni/friends) di ciascun nodo
+  const degreeMap = useMemo(() => {
+    if (!graph) return new Map<number, number>();
+
+    const map = new Map<number, number>();
+    for (const node of graph.nodes) {
+      map.set(node.id, 0);
+    }
+    for (const edge of graph.edges) {
+      map.set(edge.source, (map.get(edge.source) ?? 0) + 1);
+      map.set(edge.target, (map.get(edge.target) ?? 0) + 1);
+    }
+    return map;
+  }, [graph]);
+
+  // Ordina i post dallo step di creazione più recente al più vecchio e prende solo i primi 10
+  const visiblePosts = useMemo(() => {
+    if (feed === null || feedOwnerId === null) {
+      return [];
+    }
+
+    return [...feed.posts]
+      .filter((post) => post.creator_node !== feedOwnerId)
+      .sort((a, b) => b.creation_step - a.creation_step)
+      .slice(0, 10);
+  }, [feed, feedOwnerId]);
+
+  // Riporta lo scroll in cima ad ogni nuovo step o cambio di nodo
+  useEffect(() => {
+    if (postListRef.current) {
+      postListRef.current.scrollTop = 0;
+    }
+  }, [currentStep, selectedNodeId]);
 
   return (
     <aside className="feed-panel card">
       <div className="panel-heading">
-        <div>
+        <div className="feed-panel__identity">
           <p className="eyebrow">Feed</p>
-          <h2>Animal {selectedNodeId ?? '...'}</h2>
+          <h2 className="feed-panel__citizen">
+            {selectedNodeId !== null ? (
+              <>
+                <img
+                  className="feed-panel__citizen-avatar"
+                  src={getAnimalImageForNode(selectedNodeId)}
+                  alt={`Animal avatar for node ${selectedNodeId}`}
+                />
+                <div className="feed-panel__alignment">
+                  <div
+                    className="feed-panel__alignment-track"
+                    role="slider"
+                    aria-label="Node alignment"
+                    aria-valuemin={0}
+                    aria-valuemax={1}
+                    aria-valuenow={selectedNodeState ?? 0.5}
+                    aria-readonly="true"
+                  >
+                    <div
+                      className="feed-panel__alignment-thumb"
+                      style={{ left: `${(selectedNodeState ?? 0.5) * 100}%` }}
+                    />
+                  </div>
+                  <div className="feed-panel__alignment-labels">
+                    <span style={{ color: CATEGORY_CONFIG.gamma.color }}>{CATEGORY_CONFIG.gamma.label}</span>
+                    <span style={{ color: CATEGORY_CONFIG.beta.color }}>{CATEGORY_CONFIG.beta.label}</span>
+                    <span style={{ color: CATEGORY_CONFIG.alpha.color }}>{CATEGORY_CONFIG.alpha.label}</span>
+                  </div>
+                </div>
+              </>
+            ) : (
+              '...'
+            )}
+          </h2>
         </div>
       </div>
 
@@ -41,28 +111,51 @@ export function FeedPanel({
       ) : visiblePosts.length === 0 ? (
         <div className="empty-state">This node has not seen any posts yet.</div>
       ) : (
-        <div className="post-list">
+        <div className="post-list" ref={postListRef}>
           {visiblePosts.map((post) => {
             const isCensored = post.status === 'censored';
             const isActiveHighlight = highlightedPostId === post.id;
-            const elapsedDays = Math.max(0, (currentStep - post.creation_step)-1);
-            const postedLabel = elapsedDays === 0 ? 'Posted today' : elapsedDays === 1? 'Posted 1 day ago': `Posted ${elapsedDays} days ago`;
+            const elapsedDays = Math.max(0, (currentStep - post.creation_step) - 1);
+            const postedLabel =
+              elapsedDays === 0
+                ? 'Posted today'
+                : elapsedDays === 1
+                ? 'Posted 1 day ago'
+                : `Posted ${elapsedDays} days ago`;
+
+            // Recupera il numero di connessioni (friends) del creatore del post
+            const creatorFriends =
+              degreeMap.get(post.creator_node) ??
+              (post as unknown as { creator_degree?: number; creator_friends?: number }).creator_degree ??
+              (post as unknown as { creator_degree?: number; creator_friends?: number }).creator_friends ??
+              0;
+
             return (
               <article
                 key={post.id}
                 className={`post-card ${post.category} ${isCensored ? 'is-censored' : ''} ${isActiveHighlight ? 'is-highlighted' : ''}`}
                 onClick={() => onHighlightPost(post)}
               >
-                <div className="post-card__header">
-                  <span className="meta-chip">{postedLabel}</span>
+                <div className="post-card__top">
+                  <img
+                    className="post-avatar"
+                    src={getAnimalImageForNode(post.creator_node)}
+                    alt={`Animal avatar for node ${post.creator_node}`}
+                    loading="lazy"
+                    width={44}
+                    height={44}
+                  />
+                  <span className="post-card__timestamp">{postedLabel}</span>
                 </div>
-                <div className="post-card__body">
-                  <div className="post-card__metrics">
-                    <p className="post-card__content">"{post.content}"</p>
-                    <p>Origin node: {post.creator_node}</p>
-                    <p>Seen by: {post.seen_by.length} {post.seen_by.length === 1 ? 'user' : 'users'}</p>
-                    <p>Reposts: {post.repost_count}</p>
-                  </div>
+                <p className="post-card__content">"{post.content}"</p>
+                <div className="post-card__stats">
+                  <span>
+                    Seen by {post.seen_by.length} {post.seen_by.length === 1 ? 'user' : 'users'}
+                  </span>
+                  <span>{post.repost_count} reposts</span>
+                  <span>
+                    {creatorFriends} {creatorFriends === 1 ? 'friend' : 'friends'}
+                  </span>
                 </div>
                 <div className="post-card__footer">
                   <button
@@ -76,7 +169,6 @@ export function FeedPanel({
                   >
                     {isCensored ? 'Moderated' : 'Moderate'}
                   </button>
-                  <span className="status-label">{isCensored ? 'Propagation halted' : 'Active'}</span>
                 </div>
               </article>
             );

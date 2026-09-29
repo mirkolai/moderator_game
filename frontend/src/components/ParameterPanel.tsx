@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
+import { CATEGORY_CONFIG } from '../config/categories';
 import type { SimulationParameters } from '../types';
 
 interface TooltipPortalProps {
@@ -91,13 +92,13 @@ const labels: Record<ParameterKey, string> = {
   number_of_nodes: 'Number of nodes',
   p_generate_base: 'Base generation probability',
   weight_state_influence_on_post_type: 'State influence on post type',
-  bias_gamma: 'Gamma bias (Tamed)',
-  bias_alpha: 'Alpha bias (Uncaged)',
-  bias_beta: 'Beta bias (Undecided)',
+  bias_gamma: `Gamma bias (${CATEGORY_CONFIG.gamma.label})`,
+  bias_alpha: `Alpha bias (${CATEGORY_CONFIG.alpha.label})`,
+  bias_beta: `Beta bias (${CATEGORY_CONFIG.beta.label})`,
   p_repost_base: 'Base repost pressure',
-  p_repost_gamma: 'Gamma repost modifier (Tamed)',
-  p_repost_alpha: 'Alpha repost modifier (Uncaged)',
-  p_repost_beta: 'Beta repost modifier (Undecided)',
+  p_repost_gamma: `Gamma repost modifier (${CATEGORY_CONFIG.gamma.label})`,
+  p_repost_alpha: `Alpha repost modifier (${CATEGORY_CONFIG.alpha.label})`,
+  p_repost_beta: `Beta repost modifier (${CATEGORY_CONFIG.beta.label})`,
   influence_strength: 'Influence strength',
   p_add_edge: 'Add-edge probability',
   edge_addition_gamma_threshold: 'Gamma convergence threshold (add edge)',
@@ -114,9 +115,9 @@ const descriptions: Record<ParameterKey, string> = {
   number_of_nodes: 'Total number of citizens in the network. Range: 8–200. Low: fast, sparse simulation. High: richer dynamics but slower.',
   p_generate_base: 'Base probability that a citizen creates a post each day. Range: 0–1. Low: few posts, slow spread. High: dense information flow.',
   weight_state_influence_on_post_type: 'How strongly a citizen\'s opinion drives the content they publish. Range: 0–5. Low (≈0): bias values dominate. High (≈5): opinion-aligned users almost always publish matching content.',
-  bias_gamma: 'Baseline score for publishing gamma content (mapped to Tamed). Range: 0–5. Higher boosts low-end narrative production.',
-  bias_alpha: 'Baseline score for publishing alpha content (mapped to Uncaged). Range: 0–5. Higher boosts high-end narrative production.',
-  bias_beta: 'Baseline score for publishing beta content (mapped to Undecided). Range: 0–5. Higher increases center-band narrative share.',
+  bias_gamma: `Baseline score for publishing gamma content (mapped to ${CATEGORY_CONFIG.gamma.label}). Range: 0–5. Higher boosts low-end narrative production.`,
+  bias_alpha: `Baseline score for publishing alpha content (mapped to ${CATEGORY_CONFIG.alpha.label}). Range: 0–5. Higher boosts high-end narrative production.`,
+  bias_beta: `Baseline score for publishing beta content (mapped to ${CATEGORY_CONFIG.beta.label}). Range: 0–5. Higher increases center-band narrative share.`,
   p_repost_base: 'Base pressure to repost content seen in the feed (sigmoid input). Range: 0–5. Low: content stays local. High: viral spread.',
   p_repost_gamma: 'Multiplier applied on top of base repost pressure for gamma content. Range: 0–5. Higher values amplify low-end narrative virality.',
   p_repost_alpha: 'Multiplier applied on top of base repost pressure for alpha content. Range: 0–5. Higher values amplify high-end narrative virality.',

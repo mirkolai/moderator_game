@@ -2,6 +2,7 @@ import alphaPostsCsv from './data/alphaPosts.csv?raw';
 import betaPostsCsv from './data/betaPosts.csv?raw';
 import gammaPostsCsv from './data/gammaPosts.csv?raw';
 import { extractPostContents } from './csvContent';
+import { CATEGORY_CONFIG } from '../config/categories';
 import type { Classification } from '../types';
 
 export interface CategoryDefinition {
@@ -11,22 +12,22 @@ export interface CategoryDefinition {
   postContents: string[];
 }
 
-// Ordered by opinion space: low -> center -> high.
+// Ordered by opinion space: low -> center -> high. Labels come from the shared category config.
 export const CATEGORY_GAMMA: CategoryDefinition = {
   key: 'gamma',
-  label: 'Tamed',
+  label: CATEGORY_CONFIG.gamma.label,
   postContents: extractPostContents(gammaPostsCsv),
 };
 
 export const CATEGORY_BETA: CategoryDefinition = {
   key: 'beta',
-  label: 'Undecided',
+  label: CATEGORY_CONFIG.beta.label,
   postContents: extractPostContents(betaPostsCsv),
 };
 
 export const CATEGORY_ALPHA: CategoryDefinition = {
   key: 'alpha',
-  label: 'Uncaged',
+  label: CATEGORY_CONFIG.alpha.label,
   postContents: extractPostContents(alphaPostsCsv),
 };
 

@@ -78,12 +78,14 @@ export default function App() {
             {missionDescription}
           </p>
         </div>
-        <div className="toolbar-actions">
-          <NotificationBell notifications={notifications} onMarkAllRead={markAllRead} />
-        </div>
+        {isWelcomeOpen ? null : (
+          <div className="toolbar-actions">
+            <NotificationBell notifications={notifications} onMarkAllRead={markAllRead} />
+          </div>
+        )}
       </header>
 
-      {error ? <div className="error-banner">{error}</div> : null}
+      {isWelcomeOpen || !error ? null : <div className="error-banner">{error}</div>}
 
       {isWelcomeOpen ? (
         <div className="welcome-overlay" role="dialog" aria-modal="true" aria-labelledby="welcome-title">
@@ -156,103 +158,118 @@ export default function App() {
             </button>
           </div>
         </div>
-      ) : null}
-
-      <section className="status-strip">
-        <div className="status-card card">
-          <span>Countdown</span>
-          <strong>{daysToElection} days to bulldozers arrive</strong>
-        </div>
-        <div className="status-card card">
-          <span>Distribution</span>
-          <div className="status-stack">
-            <div className="status-bar-row gamma-row">
-              <strong>{toPercent(status?.percentages.gamma)}</strong>
-              <div className="status-bar-track">
-                <div className="status-bar-fill gamma-fill" style={{ width: toPercent(status?.percentages.gamma) }} />
+      ) : (
+        <>
+          <section className="status-strip">
+            <div className="status-card card">
+              <span>Countdown</span>
+              <strong>{daysToElection+1} days to bulldozers arrive</strong>
+              <button
+                type="button"
+                className="ghost-button status-card__skip"
+                disabled={loading || !isGameRunning}
+                onClick={() => void stepSimulation()}
+              >
+                Skip to next day
+              </button>
+            </div>
+            <div className="status-card card">
+              <div className="status-stack">
+                <div className="status-bar-row gamma-row row align-items-center gx-3">
+                  <div className="col-8">
+                    <div className="status-bar-track">
+                      <div className="status-bar-fill gamma-fill" style={{ width: toPercent(status?.percentages.gamma) }} />
+                    </div>
+                  </div>
+                  <div className="col-2">
+                    <strong>{toPercent(status?.percentages.gamma)}</strong>
+                  </div>
+                  <div className="col-2">
+                    <span style={{ color: CATEGORY_CONFIG.gamma.color }}>{CATEGORY_CONFIG.gamma.label}</span>
+                  </div>
+                </div>
+                <div className="status-bar-row beta-row row align-items-center gx-3">
+                  <div className="col-8">
+                    <div className="status-bar-track">
+                      <div className="status-bar-fill beta-fill" style={{ width: toPercent(status?.percentages.beta) }} />
+                    </div>
+                  </div>
+                  <div className="col-2">
+                    <strong>{toPercent(status?.percentages.beta)}</strong>
+                  </div>
+                  <div className="col-2">
+                    <span style={{ color: CATEGORY_CONFIG.beta.color }}>{CATEGORY_CONFIG.beta.label}</span>
+                  </div>
+                </div>
+                <div className="status-bar-row alpha-row row align-items-center gx-3">
+                  <div className="col-8">
+                    <div className="status-bar-track">
+                      <div className="status-bar-fill alpha-fill" style={{ width: toPercent(status?.percentages.alpha) }} />
+                    </div>
+                  </div>
+                  <div className="col-2">
+                    <strong>{toPercent(status?.percentages.alpha)}</strong>
+                  </div>
+                  <div className="col-2">
+                    <span style={{ color: CATEGORY_CONFIG.alpha.color }}>{CATEGORY_CONFIG.alpha.label}</span>
+                  </div>
+                </div>
               </div>
             </div>
-            <div className="status-bar-row beta-row">
-              <strong>{toPercent(status?.percentages.beta)}</strong>
-              <div className="status-bar-track">
-                <div className="status-bar-fill beta-fill" style={{ width: toPercent(status?.percentages.beta) }} />
+          </section>
+
+          <button
+            type="button"
+            className={`panel-toggle ${isParameterPanelOpen ? 'is-open' : ''}`}
+            onClick={() => setIsParameterPanelOpen((current) => !current)}
+            aria-label={isParameterPanelOpen ? 'Hide parameters panel' : 'Show parameters panel'}
+            aria-expanded={isParameterPanelOpen}
+            aria-controls="parameter-panel"
+          >
+            <span className="panel-toggle-indicator" aria-hidden="true">
+              {isParameterPanelOpen ? '◀' : '▶'}
+            </span>
+            <span className="panel-toggle-label">Parameters</span>
+          </button>
+
+          <main className={`layout-grid ${isParameterPanelOpen ? 'parameters-open' : 'parameters-closed'}`}>
+            <aside
+              id="parameter-panel"
+              className={`parameter-dock ${isParameterPanelOpen ? 'is-open' : 'is-closed'}`}
+              aria-hidden={!isParameterPanelOpen}
+            >
+              <ParameterPanel parameters={parameters} disabled={loading} onApply={updateParameters} />
+            </aside>
+
+            <section className="main-stage">
+              <div className="visual-row">
+                <NetworkGraph
+                  graph={graph}
+                  selectedNodeId={selectedNodeId}
+                  highlightedNodeIds={highlightedNodeIds}
+                  onSelectNode={(nodeId) => void selectNode(nodeId)}
+                />
+                <FeedPanel
+                  feed={feed}
+                  graph={graph}
+                  selectedNodeId={selectedNodeId}
+                  selectedNodeState={graph?.nodes.find((node) => node.id === selectedNodeId)?.state ?? null}
+                  highlightedPostId={highlightedPostId}
+                  currentStep={currentStep}
+                  censorshipActionsRemaining={status?.censorship_actions_remaining ?? 0}
+                  onHighlightPost={(post) => void highlightInfluence(post)}
+                  onCensorPost={(postId) => void censorPost(postId)}
+                />
               </div>
-            </div>
-            <div className="status-bar-row alpha-row">
-              <strong>{toPercent(status?.percentages.alpha)}</strong>
-              <div className="status-bar-track">
-                <div className="status-bar-fill alpha-fill" style={{ width: toPercent(status?.percentages.alpha) }} />
-              </div>
-            </div>
-          </div>
-        </div>
-        <div className="status-card card">
-          <span>Legend</span>
-          <div className="status-legend">
-            <div className="status-legend-item">
-              <i className="legend-dot gamma" />
-              <span>{CATEGORY_CONFIG.gamma.label}</span>
-            </div>
-            <div className="status-legend-item">
-              <i className="legend-dot beta" />
-              <span>{CATEGORY_CONFIG.beta.label}</span>
-            </div>
-            <div className="status-legend-item">
-              <i className="legend-dot alpha" />
-              <span>{CATEGORY_CONFIG.alpha.label}</span>
-            </div>
-          </div>
-        </div>
-      </section>
 
-      <button
-        type="button"
-        className={`panel-toggle ${isParameterPanelOpen ? 'is-open' : ''}`}
-        onClick={() => setIsParameterPanelOpen((current) => !current)}
-        aria-label={isParameterPanelOpen ? 'Hide parameters panel' : 'Show parameters panel'}
-        aria-expanded={isParameterPanelOpen}
-        aria-controls="parameter-panel"
-      >
-        <span className="panel-toggle-indicator" aria-hidden="true">
-          {isParameterPanelOpen ? '◀' : '▶'}
-        </span>
-        <span className="panel-toggle-label">Parameters</span>
-      </button>
+            </section>
+          </main>
 
-      <main className={`layout-grid ${isParameterPanelOpen ? 'parameters-open' : 'parameters-closed'}`}>
-        <aside
-          id="parameter-panel"
-          className={`parameter-dock ${isParameterPanelOpen ? 'is-open' : 'is-closed'}`}
-          aria-hidden={!isParameterPanelOpen}
-        >
-          <ParameterPanel parameters={parameters} disabled={loading} onApply={updateParameters} />
-        </aside>
+          <footer className="footer-note">{status?.message ?? 'Loading simulation state...'}</footer>
+        </>
+      )}
 
-        <section className="main-stage">
-          <div className="visual-row">
-            <NetworkGraph
-              graph={graph}
-              selectedNodeId={selectedNodeId}
-              highlightedNodeIds={highlightedNodeIds}
-              onSelectNode={(nodeId) => void selectNode(nodeId)}
-            />
-            <FeedPanel
-              feed={feed}
-              selectedNodeId={selectedNodeId}
-              highlightedPostId={highlightedPostId}
-              currentStep={currentStep}
-              censorshipActionsRemaining={status?.censorship_actions_remaining ?? 0}
-              onHighlightPost={(post) => void highlightInfluence(post)}
-              onCensorPost={(postId) => void censorPost(postId)}
-            />
-          </div>
-
-        </section>
-      </main>
-
-      <footer className="footer-note">{status?.message ?? 'Loading simulation state...'}</footer>
-
-      {isGameFinished ? (
+      {!isWelcomeOpen && isGameFinished ? (
         <div className="endgame-overlay" role="dialog" aria-modal="true" aria-live="polite">
           <div className="endgame-card card">
             <p className="eyebrow">Match Result</p>

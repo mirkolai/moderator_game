@@ -1,4 +1,4 @@
-import { CATEGORY_ALPHA, CATEGORY_GAMMA } from './categories';
+import { CATEGORY_ALPHA, CATEGORY_BETA, CATEGORY_GAMMA } from './categories';
 import type { Classification, Outcome, SimulationParameters, TimeSeriesPoint } from '../types';
 
 /**
@@ -65,6 +65,6 @@ export const GameLogic = {
     }
 
     const stepsLeft = Math.max(0, params.election_step - step);
-    return { outcome: 'running', message: `Campaign in progress. ${stepsLeft} day(s) until bulldozers arrive.` };
+    return { outcome: 'running', message: `Campaign in progress. ${stepsLeft+1} day(s) until bulldozers arrive.` };
   },
 };
