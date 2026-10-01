@@ -7,6 +7,7 @@ export interface NodeDatum {
   id: number;
   state: number;
   classification: Classification;
+  posts_count: number;
 }
 
 export interface EdgeDatum {
@@ -81,8 +82,7 @@ export interface SimulationParameters {
   p_repost_beta: number;
   influence_strength: number;
   p_add_edge: number;
-  edge_addition_gamma_threshold: number;
-  edge_addition_alpha_threshold: number;
+  edge_addition_opinion_threshold: number;
   p_remove_edge: number;
   edge_removal_opinion_threshold: number;
   max_censorship_actions_per_step: number;

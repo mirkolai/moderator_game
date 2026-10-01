@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import * as d3 from 'd3';
 
 import { getAnimalImageForNode } from '../config/animals';
@@ -32,9 +32,11 @@ function edgeKey(source: number, target: number): string {
   return `${source}-${target}`;
 }
 
-function formatNodeAlignment(node: NodeDatum): string {
-  const alignment = node.state.toFixed(2);
-  return `Node ${node.id} | Alignment: ${alignment} | Category: ${node.classification}`;
+interface HoveredNode {
+  node: NodeDatum;
+  friendCount: number;
+  x: number;
+  y: number;
 }
 
 export function NetworkGraph({
@@ -44,6 +46,8 @@ export function NetworkGraph({
   onSelectNode,
 }: NetworkGraphProps) {
   const svgRef = useRef<SVGSVGElement | null>(null);
+  const panelRef = useRef<HTMLElement | null>(null);
+  const [hoveredNode, setHoveredNode] = useState<HoveredNode | null>(null);
 
   const highlightedSet = useMemo(
     () => new Set(highlightedNodeIds),
@@ -469,9 +473,6 @@ export function NetworkGraph({
             .attr('preserveAspectRatio', 'xMidYMid slice')
             .style('pointer-events', 'none');
 
-          // Tooltip
-          group.append('title').text((node) => formatNodeAlignment(node));
-
           group
             .transition()
             .duration(500)
@@ -492,21 +493,49 @@ export function NetworkGraph({
               .remove(),
           ),
       )
-      .on('click', (_, node) => {
+      .on('pointerdown', (event, node) => {
+        if (event.button !== 0) {
+          return;
+        }
+
         if (selectedNodeId === node.id) {
           onSelectRef.current(null);
         } else {
           onSelectRef.current(node.id);
         }
+      })
+      .on('pointerenter', (event, node) => {
+        const panel = panelRef.current;
+        if (!panel) return;
+        const bounds = panel.getBoundingClientRect();
+        const friendCount = degreeMap.get(node.id) ?? 0;
+        setHoveredNode({
+          node,
+          friendCount,
+          x: event.clientX - bounds.left,
+          y: event.clientY - bounds.top,
+        });
+      })
+      .on('pointermove', (event, node) => {
+        const panel = panelRef.current;
+        if (!panel) return;
+        const bounds = panel.getBoundingClientRect();
+        setHoveredNode((current) => current
+          ? {
+              ...current,
+              node,
+              x: event.clientX - bounds.left,
+              y: event.clientY - bounds.top,
+            }
+          : current);
+      })
+      .on('pointerleave', () => {
+        setHoveredNode(null);
       });
 
     // =========================================================================
     // NODE TOOLTIP & GEOMETRY
     // =========================================================================
-
-    nodeSelection
-      .select('title')
-      .text((node) => formatNodeAlignment(node));
 
     // Sincronizzazione raggio cerchio bianco di sfondo
     nodeSelection
@@ -719,13 +748,42 @@ export function NetworkGraph({
   // ===========================================================================
 
   return (
-    <section className="card graph-panel">
+    <section ref={panelRef} className="card graph-panel">
       <svg
         ref={svgRef}
         className="graph-svg"
         role="img"
         aria-label="Simulation network graph"
       />
+      {hoveredNode ? (
+        <div
+          className="node-hover-card"
+          style={{
+            left: `${Math.min(hoveredNode.x + 14, Math.max(8, (panelRef.current?.clientWidth ?? 260) - 238))}px`,
+            top: `${Math.min(hoveredNode.y + 14, Math.max(8, (panelRef.current?.clientHeight ?? 160) - 142))}px`,
+          }}
+        >
+          <span className="node-hover-card__category" style={{ color: CATEGORY_CONFIG[hoveredNode.node.classification].color }}>
+            {CATEGORY_CONFIG[hoveredNode.node.classification].label}
+          </span>
+          <div className="node-hover-card__alignment-label">
+            <span>Alignment</span>
+            <b>{hoveredNode.node.state.toFixed(2)}</b>
+          </div>
+          <div className="node-hover-card__alignment-track" aria-label={`Alignment ${hoveredNode.node.state.toFixed(2)}`}>
+            <span style={{ left: `${hoveredNode.node.state * 100}%` }} />
+          </div>
+          <div className="node-hover-card__alignment-labels" aria-hidden="true">
+            <span>{CATEGORY_CONFIG.gamma.label}</span>
+            <span>{CATEGORY_CONFIG.beta.label}</span>
+            <span>{CATEGORY_CONFIG.alpha.label}</span>
+          </div>
+          <div className="node-hover-card__stats">
+            <span>{hoveredNode.friendCount} {hoveredNode.friendCount === 1 ? 'friend' : 'friends'}</span>
+            <span>{hoveredNode.node.posts_count} {hoveredNode.node.posts_count === 1 ? 'post' : 'posts'} posted</span>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }

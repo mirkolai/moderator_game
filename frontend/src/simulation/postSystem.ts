@@ -86,6 +86,14 @@ export class PostSystem {
     return this.posts.get(postId);
   }
 
+  getCreatedPostCounts(numberOfNodes: number): number[] {
+    const counts = Array.from({ length: numberOfNodes }, () => 0);
+    for (const post of this.posts.values()) {
+      counts[post.creatorNode] += 1;
+    }
+    return counts;
+  }
+
   getFeedForNode(nodeId: number): InternalPost[] {
     const visiblePosts = [...this.posts.values()].filter(
       (post) => nodeId === post.creatorNode || post.seenBy.has(nodeId),

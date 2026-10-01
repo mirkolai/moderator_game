@@ -157,8 +157,7 @@ export class SimulationEngine {
     if (this.rng.random() <= this.params.p_add_edge) {
       this.graph.addConvergentEdge(
         this.nodeStates,
-        this.params.edge_addition_gamma_threshold,
-        this.params.edge_addition_alpha_threshold,
+        this.params.edge_addition_opinion_threshold,
         this.rng,
       );
     }
@@ -180,6 +179,7 @@ export class SimulationEngine {
   }
 
   getGraphState(): GraphState {
+    const postsCreatedByNode = this.posts.getCreatedPostCounts(this.nodeStates.length);
     return {
       step: this.currentStep,
       directed: false,
@@ -187,6 +187,7 @@ export class SimulationEngine {
         id: nodeId,
         state,
         classification: GameLogic.classifyState(state, this.params.center_tolerance),
+        posts_count: postsCreatedByNode[nodeId],
       })),
       edges: this.graph.edges().map(([source, target]) => ({ source, target })),
     };

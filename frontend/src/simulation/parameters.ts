@@ -2,7 +2,7 @@ import type { SimulationParameters } from '../types';
 
 /** Inclusive [min, max] bounds mirroring the original Pydantic field constraints. */
 const PARAMETER_RANGES: Record<keyof SimulationParameters, [number, number]> = {
-  number_of_nodes: [8, 200],
+  number_of_nodes: [5, 200],
   p_generate_base: [0, 1],
   weight_state_influence_on_post_type: [0, 5],
   bias_gamma: [0, 5],
@@ -14,8 +14,7 @@ const PARAMETER_RANGES: Record<keyof SimulationParameters, [number, number]> = {
   p_repost_beta: [0, 5],
   influence_strength: [0, 1],
   p_add_edge: [0, 1],
-  edge_addition_gamma_threshold: [0, 1],
-  edge_addition_alpha_threshold: [0, 1],
+  edge_addition_opinion_threshold: [0, 0.5],
   p_remove_edge: [0, 1],
   edge_removal_opinion_threshold: [0, 1],
   max_censorship_actions_per_step: [0, 25],
@@ -29,20 +28,19 @@ export const DEFAULT_PARAMETERS: SimulationParameters = {
 
   p_generate_base: 0.45,
   weight_state_influence_on_post_type: 1.35,
-  bias_gamma: 1.15,
-  bias_alpha: 1.0,
-  bias_beta: 0.85,
+  bias_gamma: 3,
+  bias_alpha: 1,
+  bias_beta: 2,
 
   p_repost_base: 1.8,
-  p_repost_gamma: 1.35,
-  p_repost_alpha: 0.95,
-  p_repost_beta: 0.65,
+  p_repost_gamma: 3,
+  p_repost_alpha: 1,
+  p_repost_beta: 2,
 
   influence_strength: 0.08,
 
   p_add_edge: 0.3,
-  edge_addition_gamma_threshold: 0.35,
-  edge_addition_alpha_threshold: 0.65,
+  edge_addition_opinion_threshold: 0.35,
   p_remove_edge: 0.3,
   edge_removal_opinion_threshold: 0.3,
 

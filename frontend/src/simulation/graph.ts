@@ -122,14 +122,14 @@ export class GraphManager {
 
   /**
    * Adds a random edge between two unconnected nodes that share the same
-   * opinion cluster. A pair qualifies when both nodes are low-cluster
-   * (state <= gammaThreshold) or both are high-cluster (state >= alphaThreshold).
+  * opinion cluster. A pair qualifies when both nodes are low-cluster
+  * (state <= opinionThreshold) or both are high-cluster
+  * (state >= 1 - opinionThreshold).
    * Returns null if no qualifying pair exists.
    */
   addConvergentEdge(
     nodeStates: number[],
-    gammaThreshold: number,
-    alphaThreshold: number,
+    opinionThreshold: number,
     rng: Rng,
   ): [number, number] | null {
     const candidates: Array<[number, number]> = [];
@@ -140,8 +140,8 @@ export class GraphManager {
         if (this.adjacency.get(source)?.has(target)) continue;
         const sourceState = nodeStates[source];
         const targetState = nodeStates[target];
-        const bothGamma = sourceState <= gammaThreshold && targetState <= gammaThreshold;
-        const bothAlpha = sourceState >= alphaThreshold && targetState >= alphaThreshold;
+        const bothGamma = sourceState <= opinionThreshold && targetState <= opinionThreshold;
+        const bothAlpha = sourceState >= 1 - opinionThreshold && targetState >= 1 - opinionThreshold;
         if (bothGamma || bothAlpha) {
           candidates.push([source, target]);
         }

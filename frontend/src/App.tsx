@@ -164,14 +164,17 @@ export default function App() {
             <div className="status-card card">
               <span>Countdown</span>
               <strong>{daysToElection+1} days to bulldozers arrive</strong>
-              <button
-                type="button"
-                className="ghost-button status-card__skip"
-                disabled={loading || !isGameRunning}
-                onClick={() => void stepSimulation()}
-              >
-                Skip to next day
-              </button>
+              <div className="status-card__actions">
+                <button
+                  type="button"
+                  className="ghost-button status-card__skip"
+                  disabled={loading || !isGameRunning}
+                  onClick={() => void stepSimulation()}
+                >
+                  Skip to next day
+                </button>
+                <span className="status-card__moderation">Moderation actions left: {moderationActionsRemaining}</span>
+              </div>
             </div>
             <div className="status-card card">
               <div className="status-stack">
