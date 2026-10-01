@@ -44,7 +44,7 @@ export const DEFAULT_PARAMETERS: SimulationParameters = {
   p_remove_edge: 0.3,
   edge_removal_opinion_threshold: 0.3,
 
-  max_censorship_actions_per_step: 1,
+  max_censorship_actions_per_step: 5,
 
   election_step: 20,
   win_threshold: 0.8,
