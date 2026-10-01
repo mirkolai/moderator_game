@@ -2,6 +2,7 @@ import { FeedPanel } from './components/FeedPanel';
 import { NetworkGraph } from './components/NetworkGraph';
 import { NotificationBell } from './components/NotificationBell';
 import { ParameterPanel } from './components/ParameterPanel';
+import { TutorialOverlay } from './components/TutorialOverlay';
 import { CATEGORY_CONFIG } from './config/categories';
 import { useSimulation } from './hooks/useSimulation';
 import { useEffect, useRef, useState } from 'react';
@@ -16,6 +17,7 @@ function toPercent(value: number | undefined) {
 export default function App() {
   const [isParameterPanelOpen, setIsParameterPanelOpen] = useState(false);
   const [isWelcomeOpen, setIsWelcomeOpen] = useState(true);
+  const [isTutorialOpen, setIsTutorialOpen] = useState(false);
   const prevModerationActionsRef = useRef<number | null>(null);
 
   const {
@@ -80,6 +82,9 @@ export default function App() {
         </div>
         {isWelcomeOpen ? null : (
           <div className="toolbar-actions">
+            <button type="button" className="secondary-button" onClick={() => setIsTutorialOpen(true)}>
+              Tutorial
+            </button>
             <NotificationBell notifications={notifications} onMarkAllRead={markAllRead} />
           </div>
         )}
@@ -297,6 +302,14 @@ export default function App() {
             </button>
           </div>
         </div>
+      ) : null}
+
+      {!isWelcomeOpen && isTutorialOpen ? (
+        <TutorialOverlay
+          winImage={youWinImage}
+          loseImage={youLoseImage}
+          onClose={() => setIsTutorialOpen(false)}
+        />
       ) : null}
     </div>
   );
