@@ -1072,11 +1072,12 @@ button {
   inset: 0;
   width: 100%;
   height: 100%;
+  z-index: 0;
 }
 
 .tutorial-network__edges line {
   stroke: rgba(78, 121, 167, 0.42);
-  stroke-width: 1.4;
+  stroke-width: 3;
   vector-effect: non-scaling-stroke;
 }
 
@@ -1091,8 +1092,20 @@ button {
   stroke-width: 2.4;
 }
 
+.tutorial-network__node-backplate {
+  position: absolute;
+  z-index: 1;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: #ffffff;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
 .tutorial-network__node {
   position: absolute;
+  z-index: 2;
   display: grid;
   width: 52px;
   height: 52px;
@@ -1144,8 +1157,8 @@ button {
   right: -5px;
   bottom: -5px;
   display: grid;
-  width: 17px;
-  height: 17px;
+  width: 20px;
+  height: 20px;
   place-items: center;
   border: 2px solid #ffffff;
   border-radius: 50%;

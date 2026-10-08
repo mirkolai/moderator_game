@@ -25,12 +25,12 @@ interface TutorialStep {
 }
 
 const INITIAL_NODES: TutorialNode[] = [
-  { id: 1, state: 0.78, posts: 2, x: 12, y: 22 },
+  { id: 1, state: 0.78, posts: 2, x: 26, y: 18 },
   { id: 2, state: 0.52, posts: 1, x: 35, y: 44 },
   { id: 3, state: 0.24, posts: 3, x: 78, y: 20 },
   { id: 4, state: 0.48, posts: 1, x: 54, y: 76 },
-  { id: 5, state: 0.72, posts: 2, x: 86, y: 72 },
-  { id: 6, state: 0.68, posts: 1, x: 18, y: 78 },
+  { id: 5, state: 0.72, posts: 2, x: 76, y: 72 },
+  { id: 6, state: 0.68, posts: 1, x: 26, y: 78 },
   { id: 7, state: 0.35, posts: 2, x: 52, y: 20 },
 ];
 
@@ -60,7 +60,7 @@ const TUTORIAL_POSTS = [
     category: 'gamma',
     seenBy: 3,
     reposts: 2,
-    author: 'Node 3',
+    author: 'The Little Owl (Node 3)',
     text: 'FACT: the zoo guarantees a perfect life for every animal. Leave the forest now or your family will be in danger!',
     misleading: true,
   },
@@ -70,37 +70,37 @@ const STEPS: TutorialStep[] = [
   {
     eyebrow: 'Step 1 of 7',
     title: 'Read the network before acting',
-    explanation: 'This fixed tutorial has 7 animals and visible connections. Blue nodes protect the forest, orange nodes support the zoo, and teal nodes are undecided. The dark border is the normal state; a selected node gets a light border, while nodes outside its friend network fade.',
+    explanation: 'This fixed tutorial has 7 animals and visible connections. Blue nodes protect the forest, orange nodes support the zoo, and teal nodes are undecided. The dark border is the normal state; a selected node gets a light border, while nodes outside its friend network fade. A black edge connecting two animals indicates that they are friends.',
     action: 'Continue to node inspection',
   },
   {
     eyebrow: 'Step 2 of 7',
     title: 'Watch connections change',
-    explanation: 'A new arc can form when two unconnected animals converge on the same opinion cluster. An arc can be removed when connected animals diverge enough. The yellow arc from node 7 to node 4 is new; the red dashed arc from node 1 to node 4 was removed.',
+    explanation: 'Two animals may become friends if their opinions become sufficiently similar. In this case, a yellow arc will appear between them. Conversely, if two friends’ opinions diverge enough, their friendship may end, and the arc connecting them will be removed.The yellow arc from the Quokka (node 7) to the Owl (node 4) is new: they are now friends. The red dashed arc from the Bear (node 1) to the Owl (node 4) has been removed, indicating that the Owl and the Bear are no longer friends.',
     action: 'Continue to node inspection',
   },
   {
     eyebrow: 'Step 3 of 7',
     title: 'Select the node carrying the risk',
-    explanation: 'Click node 3, the orange Pro Zoo node. Its alignment is 0.24 and it has already published 3 posts, so it is the best place to inspect first.',
+    explanation: 'Click on the Little Owl (node 3), the orange Pro Zoo node. Its alignment is slightly Pro Zoo, and it has already published three posts, making it the best place to start when looking for misleading content.',
     action: 'Continue with node 3',
   },
   {
     eyebrow: 'Step 4 of 7',
     title: 'Open the node feed and inspect it',
     explanation: 'The feed shows what this animal can spread to its friends. Read both posts before acting, then identify the one that uses false certainty and fear to push the zoo narrative.',
-    action: 'Open node 3 feed',
+    action: 'Open Little Owl\'s (Node 3) feed',
   },
   {
     eyebrow: 'Step 5 of 7',
     title: 'Moderate the misleading post',
-    explanation: 'This post is misleading because it presents an impossible guarantee, gives no evidence, and uses fear to force a decision. Its author has 2 friends, so stopping it prevents a wider spread in this small network. The author alignment itself stays at 0.24: moderation blocks propagation, it does not rewrite the author.',
+    explanation: 'This post is misleading because it presents an impossible guarantee, gives no evidence, and uses fear to force a decision. Its author has 2 friends, so stopping it prevents a wider spread in this small network. The author alignment itself stays Pro Zoo: moderation blocks propagation, it does not rewrite the author.',
     action: 'Moderate the recommended post',
   },
   {
     eyebrow: 'Step 6 of 7',
     title: 'See what happens without moderation',
-    explanation: 'This is the fixed counterfactual: if node 3\'s misleading post had continued spreading, node 2 would have moved from 0.52 Undecided to 0.22 Pro Zoo on the next step. Moderation prevents that transfer of influence.',
+    explanation: 'This is the fixed counterfactual: if the Little Owl (Node 3)\'s misleading post had continued spreading, The Rabbit (Node 2) would have moved from Undecided to Pro Zoo on the next step. Moderation prevents that transfer of influence.',
     action: 'Continue to the final rules',
   },
   {
@@ -161,7 +161,7 @@ export function TutorialOverlay({ winImage, loseImage, onClose }: TutorialOverla
         <div className="tutorial-card__header">
           <div>
             <p className="eyebrow">Guided tutorial</p>
-            <h2 id="tutorial-title">Protect the forest in 7 nodes</h2>
+            <h2 id="tutorial-title">Protect the forest</h2>
           </div>
           <button type="button" className="tutorial-close" onClick={onClose} aria-label="Close tutorial">×</button>
         </div>
@@ -194,7 +194,7 @@ export function TutorialOverlay({ winImage, loseImage, onClose }: TutorialOverla
               <div className="tutorial-network" aria-label="Interactive fixed tutorial network with 7 nodes">
                 <div className="tutorial-network__meta">
                   <span>Interactive fixed setup</span>
-                  <strong>7 nodes</strong>
+                  <strong>A community of 7 animals</strong>
                 </div>
                 <div className="tutorial-network__canvas">
                   <svg className="tutorial-network__edges" viewBox="0 0 100 100" aria-hidden="true">
@@ -205,6 +205,14 @@ export function TutorialOverlay({ winImage, loseImage, onClose }: TutorialOverla
                       return <line key={`${sourceId}-${targetId}`} className={change ? `is-${change}` : undefined} x1={source.x} y1={source.y} x2={target.x} y2={target.y} />;
                     })}
                   </svg>
+                  {nodes.map((node) => (
+                    <span
+                      key={`backplate-${node.id}`}
+                      className="tutorial-network__node-backplate"
+                      style={{ left: `${node.x}%`, top: `${node.y}%` }}
+                      aria-hidden="true"
+                    />
+                  ))}
                   {nodes.map((node) => {
                     const category = getNodeCategory(node.state);
                     return (
@@ -222,12 +230,12 @@ export function TutorialOverlay({ winImage, loseImage, onClose }: TutorialOverla
                     );
                   })}
                 </div>
-                <div className="tutorial-network__legend">Click a node to inspect it · lines are social connections</div>
+                <div className="tutorial-network__legend">Click a node to inspect it · lines denote friendships</div>
                 {stepIndex >= 1 ? (
                   <div className="tutorial-graph-notes">
-                    <span><i className="tutorial-edge-swatch" /> Existing connection</span>
-                    <span><i className="tutorial-edge-swatch is-new" /> New connection</span>
-                    <span><i className="tutorial-edge-swatch is-removed" /> Removed connection</span>
+                    <span><i className="tutorial-edge-swatch" /> Existing friendships</span>
+                    <span><i className="tutorial-edge-swatch is-new" /> New friendships</span>
+                    <span><i className="tutorial-edge-swatch is-removed" /> Ended friendships</span>
                   </div>
                 ) : null}
                 {selectedNode ? (
@@ -239,9 +247,9 @@ export function TutorialOverlay({ winImage, loseImage, onClose }: TutorialOverla
                     <div className="tutorial-alignment-track" aria-label={`Alignment ${selectedNode.state.toFixed(2)}`}>
                       <span style={{ left: `${selectedNode.state * 100}%` }} />
                     </div>
-                    <div className="tutorial-alignment-values"><span>0.00 Pro Zoo</span><b>{selectedNode.state.toFixed(2)}</b><span>1.00 Pro Forest</span></div>
+                    <div className="tutorial-alignment-values"><span>0.00 Pro Zoo</span><span>1.00 Pro Forest</span></div>
                     <div className="tutorial-node-inspector__stats">{selectedNode.posts} posts · {TUTORIAL_EDGES.filter(([source, target]) => source === selectedNode.id || target === selectedNode.id).length} friends</div>
-                    {selectedNode.id === 3 && moderated ? <p className="tutorial-change-note">Alignment stays at 0.24. The misleading post was blocked before reaching this node's 2 friends.</p> : null}
+                    {selectedNode.id === 3 && moderated ? <p className="tutorial-change-note">Slight Pro Zoo alignment. The misleading post was blocked before reaching this node's 2 friends.</p> : null}
                   </div>
                 ) : null}
               </div>
@@ -250,11 +258,11 @@ export function TutorialOverlay({ winImage, loseImage, onClose }: TutorialOverla
                 <p className="eyebrow">{step.eyebrow}</p>
                 <h3>{step.title}</h3>
                 <p>{step.explanation}</p>
-                {stepIndex === 2 && selectedNodeId !== 3 ? <p className="tutorial-hint">Select the orange node 3 to continue.</p> : null}
+                {stepIndex === 2 && selectedNodeId !== 3 ? <p className="tutorial-hint">Select the orange Little Owl (node 3) to continue.</p> : null}
                 {stepIndex >= 3 && feedVisible ? (
                   <div className="tutorial-feed">
                     <div className="tutorial-feed__header">
-                      <strong>Feed · Node 3</strong>
+                      <strong>Feed of the Little Owl (Node 3)</strong>
                       <span>2 posts visible</span>
                     </div>
                     {TUTORIAL_POSTS.map((post) => (
@@ -282,12 +290,12 @@ export function TutorialOverlay({ winImage, loseImage, onClose }: TutorialOverla
                     ))}
                   </div>
                 ) : null}
-                {stepIndex === 4 && !moderated ? <div className="tutorial-moderation-demo"><strong>1 moderation available</strong><span>Recommended target: Node 3 · misleading Pro Zoo post</span></div> : null}
+                {stepIndex === 4 && !moderated ? <div className="tutorial-moderation-demo"><strong>1 moderation available</strong><span>Recommended target: The Litle Owl (Node 3) · misleading Pro Zoo post</span></div> : null}
                 {stepIndex === 5 ? (
                   <div className="tutorial-counterfactual">
                     <div className="tutorial-counterfactual__heading"><strong>Without moderation</strong><span>Next step projection</span></div>
-                    <div className="tutorial-counterfactual__row"><strong>Node 2 · Undecided</strong><span>0.52</span><b>→</b><strong className="tutorial-counterfactual__zoo">0.22 · Pro Zoo</strong></div>
-                    <p>The misleading post would reach node 2 through the network and pull its alignment toward Pro Zoo. Because you moderated it, the real tutorial state keeps node 2 at 0.52.</p>
+                    <div className="tutorial-counterfactual__row"><strong>The Rabbit (Node 2)</strong> <strong style={{ color: 'rgb(118, 183, 178)' }}> Undecided</strong><b>→</b><strong className="tutorial-counterfactual__zoo"> Pro Zoo</strong></div>
+                    <p>The misleading post would reach The rabbit (Node 2) through the network and pull its alignment toward Pro Zoo. Because you moderated it, the real tutorial state keeps the rabbit (Node 2) at its current alignment.</p>
                   </div>
                 ) : null}
                 {stepIndex === 6 ? (
