@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import * as d3 from 'd3';
 
 import { getAnimalImageForNode } from '../config/animals';
-import { CATEGORY_CONFIG } from '../config/categories';
+import { CATEGORY_CONFIG, POST_HIGHLIGHT_COLORS } from '../config/categories';
 import type { EdgeDatum, GraphState, NodeDatum } from '../types';
 
 // Fraction of the node radius occupied by the animal image.
@@ -13,6 +13,7 @@ interface NetworkGraphProps {
   graph: GraphState | null;
   selectedNodeId: number | null;
   highlightedNodeIds: number[];
+  isPostHighlighted: boolean;
   onSelectNode: (nodeId: number | null) => void;
 }
 
@@ -43,6 +44,7 @@ export function NetworkGraph({
   graph,
   selectedNodeId,
   highlightedNodeIds,
+  isPostHighlighted,
   onSelectNode,
 }: NetworkGraphProps) {
   const svgRef = useRef<SVGSVGElement | null>(null);
@@ -93,6 +95,25 @@ export function NetworkGraph({
     return neighbors;
   }, [selectedNodeId, graph]);
 
+  const highlightedPostNeighbors = useMemo(() => {
+    if (!graph || !isPostHighlighted) {
+      return new Set<number>();
+    }
+
+    const neighbors = new Set<number>();
+
+    for (const edge of graph.edges) {
+      if (highlightedSet.has(edge.source)) {
+        neighbors.add(edge.target);
+      }
+      if (highlightedSet.has(edge.target)) {
+        neighbors.add(edge.source);
+      }
+    }
+
+    return neighbors;
+  }, [graph, isPostHighlighted, highlightedSet]);
+
   // ---------------------------------------------------------------------------
   // Persistent refs
   // ---------------------------------------------------------------------------
@@ -121,6 +142,8 @@ export function NetworkGraph({
   const zoomTransformRef = useRef<d3.ZoomTransform>(
     d3.zoomIdentity,
   );
+  const selectedNodeIdRef = useRef(selectedNodeId);
+  selectedNodeIdRef.current = selectedNodeId;
 
   // ===========================================================================
   // EFFECT 1 — GRAPH / TOPOLOGY / SIMULATION
@@ -493,17 +516,6 @@ export function NetworkGraph({
               .remove(),
           ),
       )
-      .on('pointerdown', (event, node) => {
-        if (event.button !== 0) {
-          return;
-        }
-
-        if (selectedNodeId === node.id) {
-          onSelectRef.current(null);
-        } else {
-          onSelectRef.current(node.id);
-        }
-      })
       .on('pointerenter', (event, node) => {
         const panel = panelRef.current;
         if (!panel) return;
@@ -532,6 +544,13 @@ export function NetworkGraph({
       .on('pointerleave', () => {
         setHoveredNode(null);
       });
+
+    nodeSelection.on('click.node-select', (event, node) => {
+      event.stopPropagation();
+      onSelectRef.current(
+        selectedNodeIdRef.current === node.id ? null : node.id,
+      );
+    });
 
     // =========================================================================
     // NODE TOOLTIP & GEOMETRY
@@ -581,8 +600,9 @@ export function NetworkGraph({
         node.fy = node.y;
       })
       .on('drag', (event, node) => {
-        node.fx = event.x;
-        node.fy = event.y;
+        const radius = nodeRadius(node.id);
+        node.fx = Math.max(radius, Math.min(width - radius, event.x));
+        node.fy = Math.max(radius, Math.min(height - radius, event.y));
       })
       .on('end', (event, node) => {
         if (!event.active) {
@@ -643,6 +663,25 @@ export function NetworkGraph({
     }
 
     simulation.on('tick', () => {
+      for (const node of nodes) {
+        const radius = nodeRadius(node.id);
+        const minX = radius;
+        const maxX = width - radius;
+        const minY = radius;
+        const maxY = height - radius;
+        const x = node.x ?? width / 2;
+        const y = node.y ?? height / 2;
+
+        if (x < minX || x > maxX) {
+          node.vx = 0;
+        }
+        if (y < minY || y > maxY) {
+          node.vy = 0;
+        }
+        node.x = Math.max(minX, Math.min(maxX, x));
+        node.y = Math.max(minY, Math.min(maxY, y));
+      }
+
       const nodeById = new Map(nodes.map((node) => [node.id, node]));
 
       linkSelection
@@ -699,7 +738,7 @@ export function NetworkGraph({
     // Applica l'opacità al cerchio categoria e all'avatar, lasciando il fondo bianco solido
     selection
       .select('circle.node-main')
-      .attr('opacity', (node) => getForegroundOpacity(node));
+      .attr('fill-opacity', (node) => getForegroundOpacity(node));
 
     selection
       .select('image.node-avatar')
@@ -724,24 +763,42 @@ export function NetworkGraph({
       .duration(200)
       .attr('stroke', (node) => {
         if (selectedNodeId === node.id) {
-          return '#f3f6f8';
+          return POST_HIGHLIGHT_COLORS.selectedNode;
         }
-        if (highlightedSet.has(node.id)) {
-          return '#ffce73';
+        if (isPostHighlighted && highlightedSet.has(node.id)) {
+          return POST_HIGHLIGHT_COLORS.seenBy;
         }
-        return '#17212b';
+        if (
+          isPostHighlighted &&
+          highlightedPostNeighbors.has(node.id)
+        ) {
+          return POST_HIGHLIGHT_COLORS.potentialRecipients;
+        }
+        return selectedNodeId !== null ? '#f7f7f7' : 'none';
       })
       .attr('stroke-width', (node) =>
-        selectedNodeId === node.id || highlightedSet.has(node.id)
+        selectedNodeId === node.id ||
+        (isPostHighlighted &&
+          (highlightedSet.has(node.id) || highlightedPostNeighbors.has(node.id)))
           ? 4
           : 2.5,
       )
-      .attr('filter', (node) =>
-        highlightedSet.has(node.id)
-          ? 'drop-shadow(0 0 3px rgba(255, 206, 115, 0.85))'
+      .attr('stroke-dasharray', (node) =>
+        selectedNodeId !== node.id &&
+        isPostHighlighted &&
+        !highlightedSet.has(node.id) &&
+        highlightedPostNeighbors.has(node.id)
+          ? '5 3'
           : null,
-      );
-  }, [selectedNodeId, highlightedSet, selectedNodeNeighbors]);
+      )
+      .attr('filter', null);
+  }, [
+    selectedNodeId,
+    highlightedSet,
+    selectedNodeNeighbors,
+    isPostHighlighted,
+    highlightedPostNeighbors,
+  ]);
 
   // ===========================================================================
   // RENDER
@@ -768,7 +825,7 @@ export function NetworkGraph({
           </span>
           <div className="node-hover-card__alignment-label">
             <span>Alignment</span>
-            <b>{hoveredNode.node.state.toFixed(2)}</b>
+            {/*<b>{hoveredNode.node.state.toFixed(2)}</b>*/}
           </div>
           <div className="node-hover-card__alignment-track" aria-label={`Alignment ${hoveredNode.node.state.toFixed(2)}`}>
             <span style={{ left: `${hoveredNode.node.state * 100}%` }} />

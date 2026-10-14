@@ -13,20 +13,25 @@ export const CATEGORY_CONFIG: Record<CategoryKey, CategoryConfigEntry> = {
     key: 'alpha',
     label: 'Pro Forest',
     cssToken: 'alpha',
-    color: '#4e79a7',
+    color: '#009e73',
   },
   beta: {
     key: 'beta',
     label: 'Undecided',
     cssToken: 'beta',
-    color: '#76b7b2',
+    color: '#56b4e9',
   },
   gamma: {
     key: 'gamma',
     label: 'Pro Zoo',
     cssToken: 'gamma',
-    color: '#f28e2b',
+    color: '#cc79A7',
   },
 };
 
 export const CATEGORY_ORDER: CategoryKey[] = ['gamma', 'beta', 'alpha'];
+export const POST_HIGHLIGHT_COLORS = {
+  seenBy: '#D55E00',
+  potentialRecipients: '#D55E00',
+  selectedNode: '#f0e442',
+};

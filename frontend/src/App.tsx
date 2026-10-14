@@ -178,7 +178,7 @@ export default function App() {
                 >
                   Skip to next day
                 </button>
-                <span className="status-card__moderation">Moderation actions left: {moderationActionsRemaining}</span>
+                <span className="status-card__moderation">Debunking attempts left: {moderationActionsRemaining}</span>
               </div>
             </div>
             <div className="status-card card">
@@ -255,6 +255,7 @@ export default function App() {
                   graph={graph}
                   selectedNodeId={selectedNodeId}
                   highlightedNodeIds={highlightedNodeIds}
+                  isPostHighlighted={highlightedPostId !== null}
                   onSelectNode={(nodeId) => void selectNode(nodeId)}
                 />
                 <FeedPanel

@@ -73,6 +73,7 @@ export interface SimulationParameters {
   number_of_nodes: number;
   p_generate_base: number;
   weight_state_influence_on_post_type: number;
+  alignment_constrained_posting: boolean;
   bias_gamma: number;
   bias_alpha: number;
   bias_beta: number;

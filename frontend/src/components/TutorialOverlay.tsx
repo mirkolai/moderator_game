@@ -294,7 +294,7 @@ export function TutorialOverlay({ winImage, loseImage, onClose }: TutorialOverla
                 {stepIndex === 5 ? (
                   <div className="tutorial-counterfactual">
                     <div className="tutorial-counterfactual__heading"><strong>Without moderation</strong><span>Next step projection</span></div>
-                    <div className="tutorial-counterfactual__row"><strong>The Rabbit (Node 2)</strong> <strong style={{ color: 'rgb(118, 183, 178)' }}> Undecided</strong><b>→</b><strong className="tutorial-counterfactual__zoo"> Pro Zoo</strong></div>
+                    <div className="tutorial-counterfactual__row"><strong>The Rabbit (Node 2)</strong> <strong style={{ color: 'rgb(86, 180, 233)' }}> Undecided</strong><b>→</b><strong className="tutorial-counterfactual__zoo"> Pro Zoo</strong></div>
                     <p>The misleading post would reach The rabbit (Node 2) through the network and pull its alignment toward Pro Zoo. Because you moderated it, the real tutorial state keeps the rabbit (Node 2) at its current alignment.</p>
                   </div>
                 ) : null}

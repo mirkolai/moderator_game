@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import { CATEGORY_CONFIG } from '../config/categories';
+import { hasEnabledPublishingBias } from '../simulation/parameters';
 import type { SimulationParameters } from '../types';
 
 interface TooltipPortalProps {
@@ -78,7 +79,14 @@ const groups: Array<{ title: string; keys: ParameterKey[] }> = [
   { title: 'Core', keys: ['number_of_nodes', 'election_step', 'win_threshold', 'center_tolerance'] },
   {
     title: 'Posting',
-    keys: ['p_generate_base', 'weight_state_influence_on_post_type', 'bias_gamma', 'bias_alpha', 'bias_beta'],
+    keys: [
+      'p_generate_base',
+      'weight_state_influence_on_post_type',
+      'alignment_constrained_posting',
+      'bias_gamma',
+      'bias_alpha',
+      'bias_beta',
+    ],
   },
   {
     title: 'Reposting',
@@ -92,6 +100,7 @@ const labels: Record<ParameterKey, string> = {
   number_of_nodes: 'Number of nodes',
   p_generate_base: 'Base generation probability',
   weight_state_influence_on_post_type: 'Post Impact on Alignment',
+  alignment_constrained_posting: 'Alignment-constrained posting',
   bias_gamma: `Publishing bias (${CATEGORY_CONFIG.gamma.label})`,
   bias_alpha: `Publishing bias (${CATEGORY_CONFIG.alpha.label})`,
   bias_beta: `Publishing bias (${CATEGORY_CONFIG.beta.label})`,
@@ -114,9 +123,10 @@ const descriptions: Record<ParameterKey, string> = {
   number_of_nodes: 'Total number of citizens in the network. Range: 5–200. Low: fast, sparse simulation. High: richer dynamics but slower.',
   p_generate_base: 'Base probability that a citizen creates a post each day. Range: 0–1. Low: few posts, slow spread. High: dense information flow.',
   weight_state_influence_on_post_type: 'How strongly a citizen\'s opinion drives the content they publish. Range: 0–5. Low (≈0): bias values dominate. High (≈5): opinion-aligned users almost always publish matching content.',
-  bias_gamma: `Baseline score for publishing gamma content (mapped to ${CATEGORY_CONFIG.gamma.label}). Range: 0–5. Higher boosts low-end narrative production.`,
-  bias_alpha: `Baseline score for publishing alpha content (mapped to ${CATEGORY_CONFIG.alpha.label}). Range: 0–5. Higher boosts high-end narrative production.`,
-  bias_beta: `Baseline score for publishing beta content (mapped to ${CATEGORY_CONFIG.beta.label}). Range: 0–5. Higher increases center-band narrative share.`,
+  alignment_constrained_posting: 'When enabled, Pro Zoo nodes can publish Pro Zoo or Undecided posts, Pro Forest nodes can publish Pro Forest or Undecided posts, and Undecided nodes can publish any enabled post type.',
+  bias_gamma: `Baseline score for publishing gamma content (mapped to ${CATEGORY_CONFIG.gamma.label}). Range: 0–5. Set to 0 to disable this post type; at least one publishing bias must be above 0.`,
+  bias_alpha: `Baseline score for publishing alpha content (mapped to ${CATEGORY_CONFIG.alpha.label}). Range: 0–5. Set to 0 to disable this post type; at least one publishing bias must be above 0.`,
+  bias_beta: `Baseline score for publishing beta content (mapped to ${CATEGORY_CONFIG.beta.label}). Range: 0–5. Set to 0 to disable this post type; at least one publishing bias must be above 0.`,
   p_repost_base: 'Base pressure to repost content seen in the feed (sigmoid input). Range: 0–5. Low: content stays local. High: viral spread.',
   p_repost_gamma: 'Multiplier applied on top of base repost pressure for gamma content. Range: 0–5. Higher values amplify low-end narrative virality.',
   p_repost_alpha: 'Multiplier applied on top of base repost pressure for alpha content. Range: 0–5. Higher values amplify high-end narrative virality.',
@@ -167,6 +177,8 @@ export function ParameterPanel({ parameters, disabled, onApply }: ParameterPanel
     return <section className="card parameter-panel" />;
   }
 
+  const hasPublishingBias = hasEnabledPublishingBias(draft);
+
   const updateValue = (key: ParameterKey, rawValue: string | boolean) => {
     setDraft((current: SimulationParameters | null) => {
       if (current === null) {
@@ -191,7 +203,7 @@ export function ParameterPanel({ parameters, disabled, onApply }: ParameterPanel
         <button
           type="button"
           className="primary-button"
-          disabled={disabled || saving || draft === null}
+          disabled={disabled || saving || !hasPublishingBias}
           onClick={async () => {
             if (draft === null) {
               return;
@@ -207,6 +219,11 @@ export function ParameterPanel({ parameters, disabled, onApply }: ParameterPanel
           {saving ? 'Applying...' : 'Apply + Restart'}
         </button>
       </div>
+      {!hasPublishingBias ? (
+        <p className="text-danger mb-2" role="alert">
+          At least one publishing bias must be greater than zero.
+        </p>
+      ) : null}
 
       <div className="parameter-groups">
         {groups.map((group) => (

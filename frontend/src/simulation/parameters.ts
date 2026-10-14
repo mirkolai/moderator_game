@@ -1,7 +1,11 @@
 import type { SimulationParameters } from '../types';
 
+type NumericParameterKey = {
+  [Key in keyof SimulationParameters]: SimulationParameters[Key] extends number ? Key : never;
+}[keyof SimulationParameters];
+
 /** Inclusive [min, max] bounds mirroring the original Pydantic field constraints. */
-const PARAMETER_RANGES: Record<keyof SimulationParameters, [number, number]> = {
+const PARAMETER_RANGES: Record<NumericParameterKey, [number, number]> = {
   number_of_nodes: [5, 200],
   p_generate_base: [0, 1],
   weight_state_influence_on_post_type: [0, 5],
@@ -26,18 +30,19 @@ const PARAMETER_RANGES: Record<keyof SimulationParameters, [number, number]> = {
 export const DEFAULT_PARAMETERS: SimulationParameters = {
   number_of_nodes: 24,
 
-  p_generate_base: 0.45,
+  p_generate_base: 0.4,
   weight_state_influence_on_post_type: 1.35,
-  bias_gamma: 3,
-  bias_alpha: 1,
+  alignment_constrained_posting: false,
+  bias_gamma: 2.8,
+  bias_alpha: 1.2,
   bias_beta: 2,
 
   p_repost_base: 1.8,
-  p_repost_gamma: 3,
+  p_repost_gamma: 2.8,
   p_repost_alpha: 1,
   p_repost_beta: 2,
 
-  influence_strength: 0.08,
+  influence_strength: 0.06,
 
   p_add_edge: 0.3,
   edge_addition_opinion_threshold: 0.35,
@@ -51,13 +56,22 @@ export const DEFAULT_PARAMETERS: SimulationParameters = {
   center_tolerance: 0.17,
 };
 
+export function hasEnabledPublishingBias(
+  params: Pick<SimulationParameters, 'bias_gamma' | 'bias_alpha' | 'bias_beta'>,
+): boolean {
+  return params.bias_gamma > 0 || params.bias_alpha > 0 || params.bias_beta > 0;
+}
+
 /** Clamps every field of a partial parameter update to its valid range. */
 export function clampParameters(params: SimulationParameters): SimulationParameters {
   const clamped = { ...params };
-  for (const key of Object.keys(PARAMETER_RANGES) as Array<keyof SimulationParameters>) {
+  for (const key of Object.keys(PARAMETER_RANGES) as NumericParameterKey[]) {
     const [min, max] = PARAMETER_RANGES[key];
     const value = clamped[key];
     clamped[key] = Math.min(max, Math.max(min, value)) as never;
+  }
+  if (!hasEnabledPublishingBias(clamped)) {
+    throw new RangeError('At least one publishing bias must be greater than zero.');
   }
   return clamped;
 }

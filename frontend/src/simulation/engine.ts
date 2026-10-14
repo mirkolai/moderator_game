@@ -32,6 +32,7 @@ export class SimulationEngine {
   private rng = new Rng();
   private currentStep = 0;
   private nodeStates: number[] = [];
+  private centerTieBreaks: Classification[] = [];
   private graph!: GraphManager;
   private posts!: PostSystem;
   private censorshipActionsRemaining = 0;
@@ -48,12 +49,26 @@ export class SimulationEngine {
     this.params = clampParameters(params);
     this.currentStep = 0;
     this.nodeStates = Array.from({ length: this.params.number_of_nodes }, () => 0.5);
+    this.centerTieBreaks = Array.from({ length: this.params.number_of_nodes }, () =>
+      this.params.center_tolerance >= 0.5
+        ? this.rng.random() < 0.5
+          ? 'gamma'
+          : 'alpha'
+        : 'beta',
+    );
     this.graph = GraphManager.modGameNet(this.params.number_of_nodes, 2, 5, 0.4, this.rng);
     this.posts = new PostSystem(this.rng);
     this.censorshipActionsRemaining = this.params.max_censorship_actions_per_step;
     this.outcome = 'running';
     this.message = 'Simulation ready.';
-    this.timeline = [GameLogic.timeSeriesPoint(this.currentStep, this.nodeStates, this.params.center_tolerance)];
+    this.timeline = [
+      GameLogic.timeSeriesPoint(
+        this.currentStep,
+        this.nodeStates,
+        this.params.center_tolerance,
+        this.centerTieBreaks,
+      ),
+    ];
     return this.getSummary();
   }
 
@@ -65,24 +80,40 @@ export class SimulationEngine {
     return this.params;
   }
 
-  private choosePostType(state: number): Classification {
+  private choosePostType(state: number, nodeId: number): Classification {
     const weight = this.params.weight_state_influence_on_post_type;
-    const gammaScore = this.params.bias_gamma + weight * (1.0 - state);
-    const alphaScore = this.params.bias_alpha + weight * state;
-    const betaScore = this.params.bias_beta + weight * Math.max(0, 1.0 - Math.abs(state - 0.5) * 2.0);
-    const options: Array<[Classification, number]> = [
-      ['gamma', gammaScore],
-      ['alpha', alphaScore],
-      ['beta', betaScore],
+    const options: Array<[Classification, number, number]> = [
+      ['gamma', this.params.bias_gamma + weight * (1.0 - state), this.params.bias_gamma],
+      ['alpha', this.params.bias_alpha + weight * state, this.params.bias_alpha],
+      [
+        'beta',
+        this.params.bias_beta + weight * Math.max(0, 1.0 - Math.abs(state - 0.5) * 2.0),
+        this.params.bias_beta,
+      ],
     ];
-    const total = options.reduce((sum, [, score]) => sum + score, 0);
+    const nodeClassification = GameLogic.classifyState(
+      state,
+      this.params.center_tolerance,
+      this.centerTieBreaks[nodeId],
+    );
+    const alignmentAllowedTypes: Classification[] =
+      !this.params.alignment_constrained_posting || nodeClassification === 'beta'
+        ? ['gamma', 'alpha', 'beta']
+        : [nodeClassification, 'beta'];
+    const enabledOptions = options.filter(
+      ([postType, , bias]) => bias > 0 && alignmentAllowedTypes.includes(postType),
+    );
+    if (enabledOptions.length === 0) {
+      throw new Error('At least one publishing bias must be greater than zero.');
+    }
+    const total = enabledOptions.reduce((sum, [, score]) => sum + score, 0);
     const threshold = this.rng.random() * total;
     let cumulative = 0;
-    for (const [postType, score] of options) {
+    for (const [postType, score] of enabledOptions) {
       cumulative += score;
       if (threshold <= cumulative) return postType;
     }
-    return 'beta';
+    return enabledOptions[enabledOptions.length - 1][0];
   }
 
   private typeInfluence(nodeId: number, postType: Classification): number {
@@ -117,7 +148,7 @@ export class SimulationEngine {
 
     this.nodeStates.forEach((state, nodeId) => {
       if (this.rng.random() <= this.params.p_generate_base) {
-        const postType = this.choosePostType(state);
+        const postType = this.choosePostType(state, nodeId);
         this.posts.createPost(postType, nodeId, this.currentStep);
       }
     });
@@ -169,9 +200,21 @@ export class SimulationEngine {
     this.posts.advanceEmitters();
     this.currentStep += 1;
     this.censorshipActionsRemaining = this.params.max_censorship_actions_per_step;
-    this.timeline.push(GameLogic.timeSeriesPoint(this.currentStep, this.nodeStates, this.params.center_tolerance));
+    this.timeline.push(
+      GameLogic.timeSeriesPoint(
+        this.currentStep,
+        this.nodeStates,
+        this.params.center_tolerance,
+        this.centerTieBreaks,
+      ),
+    );
 
-    const evaluation = GameLogic.evaluate(this.currentStep, this.nodeStates, this.params);
+    const evaluation = GameLogic.evaluate(
+      this.currentStep,
+      this.nodeStates,
+      this.params,
+      this.centerTieBreaks,
+    );
     this.outcome = evaluation.outcome;
     this.message = evaluation.message;
 
@@ -186,7 +229,11 @@ export class SimulationEngine {
       nodes: this.nodeStates.map((state, nodeId) => ({
         id: nodeId,
         state,
-        classification: GameLogic.classifyState(state, this.params.center_tolerance),
+        classification: GameLogic.classifyState(
+          state,
+          this.params.center_tolerance,
+          this.centerTieBreaks[nodeId],
+        ),
         posts_count: postsCreatedByNode[nodeId],
       })),
       edges: this.graph.edges().map(([source, target]) => ({ source, target })),
@@ -215,7 +262,11 @@ export class SimulationEngine {
   }
 
   getStatus(): StatusResponse {
-    const percentages = GameLogic.percentages(this.nodeStates, this.params.center_tolerance);
+    const percentages = GameLogic.percentages(
+      this.nodeStates,
+      this.params.center_tolerance,
+      this.centerTieBreaks,
+    );
     return {
       current_step: this.currentStep,
       max_steps: this.params.election_step,
