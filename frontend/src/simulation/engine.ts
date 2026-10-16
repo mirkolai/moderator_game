@@ -30,6 +30,7 @@ export class SimulationEngine {
   params: SimulationParameters;
 
   private rng = new Rng();
+  private seeded = false;
   private currentStep = 0;
   private nodeStates: number[] = [];
   private centerTieBreaks: Classification[] = [];
@@ -40,12 +41,20 @@ export class SimulationEngine {
   private message = '';
   private timeline: TimeSeriesPoint[] = [];
 
-  constructor(params: SimulationParameters = DEFAULT_PARAMETERS) {
+  constructor(params: SimulationParameters = DEFAULT_PARAMETERS, seed?: number) {
     this.params = clampParameters(params);
-    this.reset(this.params);
+    this.reset(this.params, seed);
   }
 
-  reset(params: SimulationParameters = this.params): SnapshotResponse {
+  /** When a seed is given the whole run becomes reproducible (used by the tutorial). */
+  reset(params: SimulationParameters = this.params, seed?: number): SnapshotResponse {
+    if (seed !== undefined) {
+      this.rng = new Rng(seed);
+      this.seeded = true;
+    } else if (this.seeded) {
+      this.rng = new Rng();
+      this.seeded = false;
+    }
     this.params = clampParameters(params);
     this.currentStep = 0;
     this.nodeStates = Array.from({ length: this.params.number_of_nodes }, () => 0.5);

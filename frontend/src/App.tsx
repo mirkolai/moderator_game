@@ -2,8 +2,13 @@ import { FeedPanel } from './components/FeedPanel';
 import { NetworkGraph } from './components/NetworkGraph';
 import { NotificationBell } from './components/NotificationBell';
 import { ParameterPanel } from './components/ParameterPanel';
-import { TutorialOverlay } from './components/TutorialOverlay';
+import { TutorialGuide } from './components/TutorialGuide';
+import { useTutorial } from './hooks/useTutorial';
+import { InstructionsOverlay } from './components/InstructionsOverlay';
 import { CATEGORY_CONFIG } from './config/categories';
+import { DEFAULT_LEVEL, LEVELS, LEVEL_ORDER, type LevelId } from './config/levels';
+
+type TabId = LevelId | 'tutorial';
 import { useSimulation } from './hooks/useSimulation';
 import { useEffect, useRef, useState } from 'react';
 import youWinImage from './img/youwin.png';
@@ -16,8 +21,9 @@ function toPercent(value: number | undefined) {
 
 export default function App() {
   const [isParameterPanelOpen, setIsParameterPanelOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<TabId>(DEFAULT_LEVEL);
   const [isWelcomeOpen, setIsWelcomeOpen] = useState(true);
-  const [isTutorialOpen, setIsTutorialOpen] = useState(false);
+  const [isInstructionsOpen, setIsInstructionsOpen] = useState(false);
   const prevModerationActionsRef = useRef<number | null>(null);
 
   const {
@@ -37,8 +43,32 @@ export default function App() {
     censorPost,
     stepSimulation,
     resetSimulation,
+    loadLevel,
+    replay,
     updateParameters,
   } = useSimulation();
+
+  const isTutorial = activeTab === 'tutorial';
+  const customizable = !isTutorial && LEVELS[activeTab].customizable;
+  const tutorial = useTutorial({
+    graph,
+    feed,
+    selectNode,
+    highlightInfluence,
+    censorPost,
+    stepSimulation,
+    replay,
+  });
+
+  const selectTab = (nextTab: TabId) => {
+    setActiveTab(nextTab);
+    setIsParameterPanelOpen(false);
+    if (nextTab === 'tutorial') {
+      tutorial.start();
+    } else {
+      void loadLevel(LEVELS[nextTab].parameters);
+    }
+  };
 
   const missionDescription = `Mission: keep ${CATEGORY_CONFIG.alpha.label} ahead before bulldozers arrive.`;
   const currentStep = status?.current_step ?? 0;
@@ -47,13 +77,13 @@ export default function App() {
   const moderationActionsRemaining = status?.censorship_actions_remaining ?? 0;
   const isGameRunning = status?.outcome === 'running';
   const hasGameStarted = currentStep > 0;
-  const isGameFinished = !isGameRunning && hasGameStarted;
+  const isGameFinished = !isTutorial && !isGameRunning && hasGameStarted;
   const endgameImage = status?.outcome === 'won' ? youWinImage : youLoseImage;
   const endgameImageAlt = status?.outcome === 'won' ? 'You win illustration' : 'You lose illustration';
 
   // Auto-step when moderation actions run out during gameplay
   useEffect(() => {
-    if (!hasGameStarted || !isGameRunning || loading) {
+    if (isTutorial || !hasGameStarted || !isGameRunning || loading) {
       prevModerationActionsRef.current = moderationActionsRemaining;
       return;
     }
@@ -68,7 +98,7 @@ export default function App() {
     }
 
     prevModerationActionsRef.current = moderationActionsRemaining;
-  }, [moderationActionsRemaining, hasGameStarted, isGameRunning, loading, stepSimulation]);
+  }, [isTutorial, moderationActionsRemaining, hasGameStarted, isGameRunning, loading, stepSimulation]);
 
   return (
     <div className="app-shell">
@@ -82,8 +112,8 @@ export default function App() {
         </div>
         {isWelcomeOpen ? null : (
           <div className="toolbar-actions">
-            <button type="button" className="secondary-button" onClick={() => setIsTutorialOpen(true)}>
-              Tutorial
+            <button type="button" className="secondary-button" onClick={() => setIsInstructionsOpen(true)}>
+              Instructions
             </button>
             <NotificationBell notifications={notifications} onMarkAllRead={markAllRead} />
           </div>
@@ -165,6 +195,49 @@ export default function App() {
         </div>
       ) : (
         <>
+          <nav className="level-tabs" aria-label="Game level">
+            <button
+              type="button"
+              className={`level-tab ${isTutorial ? 'is-active' : ''}`}
+              aria-pressed={isTutorial}
+              title="A guided walkthrough of the game"
+              disabled={loading}
+              onClick={() => selectTab('tutorial')}
+            >
+              Tutorial
+            </button>
+            {LEVEL_ORDER.map((id) => (
+              <button
+                key={id}
+                type="button"
+                className={`level-tab ${id === activeTab ? 'is-active' : ''}`}
+                aria-pressed={id === activeTab}
+                title={LEVELS[id].description}
+                disabled={loading}
+                onClick={() => selectTab(id)}
+              >
+                {LEVELS[id].label}
+              </button>
+            ))}
+          </nav>
+
+          {isTutorial ? (
+            <TutorialGuide
+              round={tutorial.round}
+              totalRounds={tutorial.totalRounds}
+              nodeId={tutorial.current.nodeId}
+              phase={tutorial.phase}
+              hint={tutorial.hint}
+              flippedCount={tutorial.flippedNodeIds.length}
+              winImage={youWinImage}
+              loseImage={youLoseImage}
+              disabled={loading}
+              onNext={tutorial.next}
+              onRewind={tutorial.rewind}
+              onFinish={() => selectTab(DEFAULT_LEVEL)}
+            />
+          ) : null}
+
           <section className="status-strip">
             <div className="status-card card">
               <span>Countdown</span>
@@ -173,7 +246,7 @@ export default function App() {
                 <button
                   type="button"
                   className="ghost-button status-card__skip"
-                  disabled={loading || !isGameRunning}
+                  disabled={loading || !isGameRunning || isTutorial}
                   onClick={() => void stepSimulation()}
                 >
                   Skip to next day
@@ -226,7 +299,7 @@ export default function App() {
             </div>
           </section>
 
-          <button
+          {customizable ? <button
             type="button"
             className={`panel-toggle ${isParameterPanelOpen ? 'is-open' : ''}`}
             onClick={() => setIsParameterPanelOpen((current) => !current)}
@@ -238,16 +311,18 @@ export default function App() {
               {isParameterPanelOpen ? '◀' : '▶'}
             </span>
             <span className="panel-toggle-label">Parameters</span>
-          </button>
+          </button> : null}
 
-          <main className={`layout-grid ${isParameterPanelOpen ? 'parameters-open' : 'parameters-closed'}`}>
-            <aside
-              id="parameter-panel"
-              className={`parameter-dock ${isParameterPanelOpen ? 'is-open' : 'is-closed'}`}
-              aria-hidden={!isParameterPanelOpen}
-            >
-              <ParameterPanel parameters={parameters} disabled={loading} onApply={updateParameters} />
-            </aside>
+          <main className={`layout-grid ${customizable ? (isParameterPanelOpen ? 'parameters-open' : 'parameters-closed') : 'no-parameters'}`}>
+            {customizable ? (
+              <aside
+                id="parameter-panel"
+                className={`parameter-dock ${isParameterPanelOpen ? 'is-open' : 'is-closed'}`}
+                aria-hidden={!isParameterPanelOpen}
+              >
+                <ParameterPanel parameters={parameters} disabled={loading} onApply={updateParameters} />
+              </aside>
+            ) : null}
 
             <section className="main-stage">
               <div className="visual-row">
@@ -256,7 +331,10 @@ export default function App() {
                   selectedNodeId={selectedNodeId}
                   highlightedNodeIds={highlightedNodeIds}
                   isPostHighlighted={highlightedPostId !== null}
-                  onSelectNode={(nodeId) => void selectNode(nodeId)}
+                  guideNodeIds={isTutorial ? tutorial.guideNodeIds : undefined}
+                  onSelectNode={(nodeId) =>
+                    isTutorial ? tutorial.onSelectNode(nodeId) : void selectNode(nodeId)
+                  }
                 />
                 <FeedPanel
                   feed={feed}
@@ -266,8 +344,12 @@ export default function App() {
                   highlightedPostId={highlightedPostId}
                   currentStep={currentStep}
                   censorshipActionsRemaining={status?.censorship_actions_remaining ?? 0}
-                  onHighlightPost={(post) => void highlightInfluence(post)}
-                  onCensorPost={(postId) => void censorPost(postId)}
+                  onHighlightPost={(post) =>
+                    isTutorial ? tutorial.onHighlightPost(post) : void highlightInfluence(post)
+                  }
+                  onCensorPost={(postId) =>
+                    isTutorial ? void tutorial.onCensorPost(postId) : void censorPost(postId)
+                  }
                 />
               </div>
 
@@ -305,12 +387,8 @@ export default function App() {
         </div>
       ) : null}
 
-      {!isWelcomeOpen && isTutorialOpen ? (
-        <TutorialOverlay
-          winImage={youWinImage}
-          loseImage={youLoseImage}
-          onClose={() => setIsTutorialOpen(false)}
-        />
+      {!isWelcomeOpen && isInstructionsOpen ? (
+        <InstructionsOverlay onClose={() => setIsInstructionsOpen(false)} />
       ) : null}
     </div>
   );

@@ -14,8 +14,12 @@ interface NetworkGraphProps {
   selectedNodeId: number | null;
   highlightedNodeIds: number[];
   isPostHighlighted: boolean;
+  guideNodeIds?: number[];
   onSelectNode: (nodeId: number | null) => void;
 }
+
+const NO_GUIDE_NODES: number[] = [];
+const GUIDE_RING_COLOR = '#7c3aed';
 
 type SimNode = d3.SimulationNodeDatum & NodeDatum;
 type SimLink = d3.SimulationLinkDatum<SimNode> & EdgeDatum;
@@ -45,11 +49,14 @@ export function NetworkGraph({
   selectedNodeId,
   highlightedNodeIds,
   isPostHighlighted,
+  guideNodeIds = NO_GUIDE_NODES,
   onSelectNode,
 }: NetworkGraphProps) {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const panelRef = useRef<HTMLElement | null>(null);
   const [hoveredNode, setHoveredNode] = useState<HoveredNode | null>(null);
+
+  const guideSet = useMemo(() => new Set(guideNodeIds), [guideNodeIds]);
 
   const highlightedSet = useMemo(
     () => new Set(highlightedNodeIds),
@@ -129,6 +136,7 @@ export function NetworkGraph({
   const prevStepRef = useRef<number | null>(null);
 
   const prevEdgesRef = useRef<Map<string, EdgeDatum>>(new Map());
+  const prevNodeCountRef = useRef(0);
 
   const removedForStepRef = useRef<Map<string, EdgeDatum>>(new Map());
 
@@ -208,11 +216,13 @@ export function NetworkGraph({
 
     if (
       prevStepRef.current !== null &&
-      graph.step !== prevStepRef.current
+      (graph.step !== prevStepRef.current ||
+        graph.nodes.length !== prevNodeCountRef.current)
     ) {
       const isReset =
         graph.step === 0 ||
-        graph.step < prevStepRef.current;
+        graph.step !== prevStepRef.current + 1 ||
+        graph.nodes.length !== prevNodeCountRef.current;
 
       if (isReset) {
         newEdgeKeys = new Set();
@@ -697,6 +707,7 @@ export function NetworkGraph({
     });
 
     prevStepRef.current = graph.step;
+    prevNodeCountRef.current = graph.nodes.length;
     prevEdgesRef.current = currentEdgesByKey;
 
     return () => {
@@ -762,6 +773,9 @@ export function NetworkGraph({
       .transition()
       .duration(200)
       .attr('stroke', (node) => {
+        if (guideSet.has(node.id)) {
+          return GUIDE_RING_COLOR;
+        }
         if (selectedNodeId === node.id) {
           return POST_HIGHLIGHT_COLORS.selectedNode;
         }
@@ -777,6 +791,7 @@ export function NetworkGraph({
         return selectedNodeId !== null ? '#f7f7f7' : 'none';
       })
       .attr('stroke-width', (node) =>
+        guideSet.has(node.id) ||
         selectedNodeId === node.id ||
         (isPostHighlighted &&
           (highlightedSet.has(node.id) || highlightedPostNeighbors.has(node.id)))
@@ -784,6 +799,7 @@ export function NetworkGraph({
           : 2.5,
       )
       .attr('stroke-dasharray', (node) =>
+        !guideSet.has(node.id) &&
         selectedNodeId !== node.id &&
         isPostHighlighted &&
         !highlightedSet.has(node.id) &&
@@ -798,6 +814,7 @@ export function NetworkGraph({
     selectedNodeNeighbors,
     isPostHighlighted,
     highlightedPostNeighbors,
+    guideSet,
   ]);
 
   // ===========================================================================

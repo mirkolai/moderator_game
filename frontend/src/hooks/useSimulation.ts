@@ -164,7 +164,7 @@ export function useSimulation() {
   const stepSimulation = async () => {
     const prevKeys = prevEdgeKeysRef.current;
     const snapshot = hydrate(() => engine.step());
-    if (!snapshot) return;
+    if (!snapshot) return null;
 
     const currentStep = snapshot.status.current_step;
     const currentKeys = new Set(snapshot.graph.edges.map((e) => `${e.source}-${e.target}`));
@@ -199,6 +199,8 @@ export function useSimulation() {
         );
       }
     }
+
+    return snapshot;
   };
 
   const resetSimulation = async () => {
@@ -213,6 +215,51 @@ export function useSimulation() {
     firstEdgeAddedNotifiedRef.current = false;
     prevEdgeKeysRef.current = new Set();
     hydrate(() => engine.reset(), null);
+  };
+
+  /** Rebuilds a fully deterministic game: seeded start, warm-up days, then one debunk list per day. */
+  const replay = (
+    replayParameters: SimulationParameters,
+    seed: number,
+    warmUpSteps: number,
+    days: string[][],
+  ) => {
+    selectedNodeIdRef.current = null;
+    setSelectedNodeId(null);
+    setFeed(null);
+    setHighlightedNodeIds([]);
+    setHighlightedPostId(null);
+    setNotifications([]);
+    firstPostNotifiedRef.current = true;
+    firstEdgeRemovedNotifiedRef.current = true;
+    firstEdgeAddedNotifiedRef.current = true;
+    hydrate(() => {
+      engine.reset(replayParameters, seed);
+      for (let day = 0; day < warmUpSteps; day += 1) {
+        engine.step();
+      }
+      for (const postIds of days) {
+        engine.censorPosts(postIds);
+        engine.step();
+      }
+      return engine.getSummary();
+    }, null);
+    prevEdgeKeysRef.current = new Set(engine.getGraphState().edges.map((e) => `${e.source}-${e.target}`));
+  };
+
+  const loadLevel = async (levelParameters: SimulationParameters) => {
+    selectedNodeIdRef.current = null;
+    setSelectedNodeId(null);
+    setFeed(null);
+    setHighlightedNodeIds([]);
+    setHighlightedPostId(null);
+    setNotifications([]);
+    firstPostNotifiedRef.current = false;
+    firstEdgeRemovedNotifiedRef.current = false;
+    firstEdgeAddedNotifiedRef.current = false;
+    prevEdgeKeysRef.current = new Set();
+    hydrate(() => engine.reset(levelParameters), null);
+    await stepSimulation();
   };
 
   const updateParameters = async (nextParameters: SimulationParameters) => {
@@ -244,6 +291,8 @@ export function useSimulation() {
     censorPost,
     stepSimulation,
     resetSimulation,
+    loadLevel,
+    replay,
     updateParameters,
   };
 }
