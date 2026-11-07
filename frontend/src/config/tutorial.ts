@@ -19,13 +19,13 @@ export const TUTORIAL_PARAMETERS: SimulationParameters = {
 };
 
 export interface TutorialRound {
-  /** Pro-zoo animal whose feed the player must open. */
+  /** Animal whose feed contains the Pro Zoo post for this round. */
   nodeId: number;
   /** The false pro-zoo post that must be debunked. */
   rightPostId: string;
 }
 
 export const TUTORIAL_ROUNDS: TutorialRound[] = [
-  { nodeId: 2, rightPostId: 'post-18' },
-  { nodeId: 15, rightPostId: 'post-20' },
+  { nodeId: 2, rightPostId: 'post-17' },
+  { nodeId: 15, rightPostId: 'post-23' },
 ];

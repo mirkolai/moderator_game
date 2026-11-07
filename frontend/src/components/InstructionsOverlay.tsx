@@ -12,7 +12,7 @@ interface InstructionsStep {
   content: ReactNode;
 }
 
-const { alpha, beta, gamma } = CATEGORY_CONFIG;
+const { pro_forest: proForest, pro_zoo: proZoo } = CATEGORY_CONFIG;
 
 function Swatch({ color, edge = false }: { color: string; edge?: boolean }) {
   return (
@@ -55,16 +55,12 @@ const STEPS: InstructionsStep[] = [
         <p>The color of a node is the animal&apos;s position on the topic:</p>
         <ul>
           <li>
-            <Swatch color={gamma.color} />
-            <strong>{gamma.label}</strong>: in favor of the zoo.
+            <Swatch color={proZoo.color} />
+            <strong>{proZoo.label}</strong>: in favor of the zoo.
           </li>
           <li>
-            <Swatch color={beta.color} />
-            <strong>{beta.label}</strong>: not convinced yet.
-          </li>
-          <li>
-            <Swatch color={alpha.color} />
-            <strong>{alpha.label}</strong>: in favor of protecting the forest.
+            <Swatch color={proForest.color} />
+            <strong>{proForest.label}</strong>: in favor of protecting the forest.
           </li>
         </ul>
         <p>
@@ -105,7 +101,8 @@ const STEPS: InstructionsStep[] = [
       <>
         <p>
           You are the moderator. You can <strong>debunk</strong> posts that are false and misleading, so they are not
-          spread across the network and cannot push animals towards the zoo.
+          spread across the network. Animals who already saw a debunked post immediately recover some of its
+          influence: all of it in Easy, half in Normal, and none in Advanced. Their node colors update right away.
         </p>
         <p>
           You have a limited number of debunking attempts per day. When they run out, or when you press{' '}
@@ -118,16 +115,14 @@ const STEPS: InstructionsStep[] = [
     title: 'How the game ends',
     content: (
       <>
-        <p>The game ends in one of these ways:</p>
+        <p>The game ends only after the final day:</p>
         <ul>
           <li>
-            <strong>You win</strong> if {alpha.label} reaches the win threshold (a super-majority of the animals,
-            e.g. 80% in Easy level) at any time, or if on the last day, when the bulldozers arrive, {alpha.label}{' '}
-            animals outnumber {gamma.label} animals.
+            <strong>You win</strong> if {proForest.label} animals outnumber {proZoo.label} animals.
           </li>
           <li>
-            <strong>You lose</strong> if {gamma.label} reaches the win threshold at any time, or if on the last
-            day {alpha.label} animals do not outnumber {gamma.label} animals.
+            <strong>You lose</strong> if {proZoo.label} animals outnumber {proForest.label} animals, or if the result
+            is tied.
           </li>
         </ul>
         <p>
@@ -150,12 +145,12 @@ const STEPS: InstructionsStep[] = [
         <ul>
           <li>
             <RingSwatch color={POST_HIGHLIGHT_COLORS.seenBy} />
-            <strong>Solid orange ring</strong>: animals that have already seen the post, and may already be
+            <strong>Solid peach ring</strong>: animals that have already seen the post, and may already be
             influenced by it.
           </li>
           <li>
             <RingSwatch color={POST_HIGHLIGHT_COLORS.potentialRecipients} dashed />
-            <strong>Dashed orange ring</strong>: animals that could see the post if you do not debunk it, and
+            <strong>Dashed peach ring</strong>: animals that could see the post if you do not debunk it, and
             could be influenced next.
           </li>
         </ul>
@@ -168,7 +163,7 @@ const STEPS: InstructionsStep[] = [
       <>
         <ul>
           <li>
-            Look for <strong>{gamma.label}</strong> animals: their feeds are likely to contain pro-zoo posts, which
+            Look for <strong>{proZoo.label}</strong> animals: their feeds are likely to contain pro-zoo posts, which
             are the ones that influenced them and that they will keep sharing.
           </li>
           <li>
@@ -186,18 +181,14 @@ const STEPS: InstructionsStep[] = [
         <p>Not every post is a threat:</p>
         <ul>
           <li>
-            <strong>{gamma.label} posts</strong> are false and misleading: debunk them.
+            <strong>{proZoo.label} posts</strong> are false and misleading: debunk them.
           </li>
           <li>
-            <strong>{alpha.label} posts</strong> push animals to protect the forest: if they spread, they help you.
-          </li>
-          <li>
-            <strong>Neutral posts</strong> do not influence anyone.
+            <strong>{proForest.label} posts</strong> push animals to protect the forest: if they spread, they help you.
           </li>
         </ul>
         <p>
-          <strong>Careful:</strong> debunking {alpha.label} or neutral posts wastes your attempts and is
-          counterproductive.
+          <strong>Careful:</strong> debunking {proForest.label} posts wastes your attempts and is counterproductive.
         </p>
       </>
     ),

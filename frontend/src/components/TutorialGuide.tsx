@@ -42,22 +42,22 @@ export function TutorialGuide({
   onFinish,
 }: TutorialGuideProps) {
   const activeStep = PHASE_STEP[phase];
-  const { gamma } = CATEGORY_CONFIG;
+  const { pro_zoo: proZoo } = CATEGORY_CONFIG;
 
   const bullets = [
     <>
-      Click the <strong>{gamma.label}</strong> animal{' '}
+      Click the highlighted animal{' '}
       <img className="tutorial-guide__avatar" src={getAnimalImageForNode(nodeId)} alt={`Animal ${nodeId}`} /> marked
       with a <strong style={{ color: '#7c3aed' }}>purple ring</strong> to open its feed.
     </>,
     <>
       Click a post in the feed: animals with a{' '}
-      <strong style={{ color: POST_HIGHLIGHT_COLORS.seenBy }}>solid orange ring</strong> have already seen it, those
-      with a <strong style={{ color: POST_HIGHLIGHT_COLORS.potentialRecipients }}>dashed orange ring</strong> could see
+      <strong style={{ color: POST_HIGHLIGHT_COLORS.seenBy }}>solid peach ring</strong> have already seen it, those
+      with a <strong style={{ color: POST_HIGHLIGHT_COLORS.potentialRecipients }}>dashed peach ring</strong> could see
       it tomorrow.
     </>,
     <>
-      Press <strong>Debunk</strong> on the <strong style={{ color: gamma.color }}>pink {gamma.label}</strong> post that
+      Press <strong>Debunk</strong> on the <strong style={{ color: proZoo.color }}>{proZoo.label}</strong> post that
       is still spreading: the one with the most potential recipients tomorrow.
     </>,
   ];
@@ -89,7 +89,7 @@ export function TutorialGuide({
         <div className="tutorial-guide__result is-good">
           <p>
             <strong>Well done!</strong> The false post stopped spreading: none of the animals with a dashed ring turned{' '}
-            {gamma.label}.
+            {proZoo.label}.
           </p>
           <button type="button" className="primary-button" disabled={disabled} onClick={onNext}>
             Next animal
@@ -101,7 +101,7 @@ export function TutorialGuide({
         <div className="tutorial-guide__result is-bad">
           <p>
             <strong>Not the right post.</strong> The false post kept spreading and{' '}
-            {flippedCount === 1 ? '1 animal' : `${flippedCount} animals`} turned {gamma.label} (purple rings). Press{' '}
+            {flippedCount === 1 ? '1 animal' : `${flippedCount} animals`} turned {proZoo.label}. Press{' '}
             <strong>Rewind</strong> and try again.
           </p>
           <button type="button" className="primary-button" disabled={disabled} onClick={onRewind}>
@@ -114,8 +114,8 @@ export function TutorialGuide({
         <div className="tutorial-guide__result is-bad">
           <img className="tutorial-guide__image" src={loseImage} alt="You lose illustration" />
           <p>
-            <strong>You lose.</strong> That was not the false {gamma.label} post: the propaganda kept spreading and the
-            bulldozers won. Only debunk false {gamma.label} posts! Press <strong>Rewind</strong> and try again.
+            <strong>You lose.</strong> That was not the false {proZoo.label} post: the propaganda kept spreading and the
+            bulldozers won. Only debunk false {proZoo.label} posts! Press <strong>Rewind</strong> and try again.
           </p>
           <button type="button" className="primary-button" disabled={disabled} onClick={onRewind}>
             Rewind

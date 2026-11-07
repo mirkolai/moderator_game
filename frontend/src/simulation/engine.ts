@@ -5,6 +5,7 @@ import { DEFAULT_PARAMETERS, clampParameters } from './parameters';
 import { Rng } from './rng';
 import type {
   Classification,
+  DayPropagationEvent,
   FeedResponse,
   GraphState,
   InfluenceResponse,
@@ -33,7 +34,7 @@ export class SimulationEngine {
   private seeded = false;
   private currentStep = 0;
   private nodeStates: number[] = [];
-  private centerTieBreaks: Classification[] = [];
+  private lastPropagationEvents: DayPropagationEvent[] = [];
   private graph!: GraphManager;
   private posts!: PostSystem;
   private censorshipActionsRemaining = 0;
@@ -57,14 +58,8 @@ export class SimulationEngine {
     }
     this.params = clampParameters(params);
     this.currentStep = 0;
-    this.nodeStates = Array.from({ length: this.params.number_of_nodes }, () => 0.5);
-    this.centerTieBreaks = Array.from({ length: this.params.number_of_nodes }, () =>
-      this.params.center_tolerance >= 0.5
-        ? this.rng.random() < 0.5
-          ? 'gamma'
-          : 'alpha'
-        : 'beta',
-    );
+    this.nodeStates = Array.from({ length: this.params.number_of_nodes }, () => 1);
+    this.lastPropagationEvents = [];
     this.graph = GraphManager.modGameNet(this.params.number_of_nodes, 2, 5, 0.4, this.rng);
     this.posts = new PostSystem(this.rng);
     this.censorshipActionsRemaining = this.params.max_censorship_actions_per_step;
@@ -74,8 +69,6 @@ export class SimulationEngine {
       GameLogic.timeSeriesPoint(
         this.currentStep,
         this.nodeStates,
-        this.params.center_tolerance,
-        this.centerTieBreaks,
       ),
     ];
     return this.getSummary();
@@ -89,29 +82,13 @@ export class SimulationEngine {
     return this.params;
   }
 
-  private choosePostType(state: number, nodeId: number): Classification {
+  private choosePostType(state: number): Classification {
     const weight = this.params.weight_state_influence_on_post_type;
     const options: Array<[Classification, number, number]> = [
-      ['gamma', this.params.bias_gamma + weight * (1.0 - state), this.params.bias_gamma],
-      ['alpha', this.params.bias_alpha + weight * state, this.params.bias_alpha],
-      [
-        'beta',
-        this.params.bias_beta + weight * Math.max(0, 1.0 - Math.abs(state - 0.5) * 2.0),
-        this.params.bias_beta,
-      ],
+      ['pro_zoo', this.params.bias_pro_zoo + weight * (1.0 - state), this.params.bias_pro_zoo],
+      ['pro_forest', this.params.bias_pro_forest + weight * state, this.params.bias_pro_forest],
     ];
-    const nodeClassification = GameLogic.classifyState(
-      state,
-      this.params.center_tolerance,
-      this.centerTieBreaks[nodeId],
-    );
-    const alignmentAllowedTypes: Classification[] =
-      !this.params.alignment_constrained_posting || nodeClassification === 'beta'
-        ? ['gamma', 'alpha', 'beta']
-        : [nodeClassification, 'beta'];
-    const enabledOptions = options.filter(
-      ([postType, , bias]) => bias > 0 && alignmentAllowedTypes.includes(postType),
-    );
+    const enabledOptions = options.filter(([, , bias]) => bias > 0);
     if (enabledOptions.length === 0) {
       throw new Error('At least one publishing bias must be greater than zero.');
     }
@@ -125,29 +102,40 @@ export class SimulationEngine {
     return enabledOptions[enabledOptions.length - 1][0];
   }
 
-  private typeInfluence(nodeId: number, postType: Classification): number {
-    if (postType === 'gamma') return -this.params.influence_strength;
-    if (postType === 'alpha') return this.params.influence_strength;
-    return (0.5 - this.nodeStates[nodeId]) * this.params.influence_strength * 0.45;
+  private typeInfluence(postType: Classification): number {
+    return postType === 'pro_zoo' ? -this.params.influence_strength : this.params.influence_strength;
   }
 
   private alignmentFactor(state: number, postType: Classification): number {
-    if (postType === 'gamma') return 1.5 - state;
-    if (postType === 'alpha') return 0.5 + state;
-    return 1.0 - Math.abs(state - 0.5);
+    return postType === 'pro_zoo' ? 1.5 - state : 0.5 + state;
   }
 
   private typeModifier(postType: Classification): number {
-    if (postType === 'gamma') return this.params.p_repost_gamma;
-    if (postType === 'alpha') return this.params.p_repost_alpha;
-    return this.params.p_repost_beta;
+    return postType === 'pro_zoo' ? this.params.p_repost_pro_zoo : this.params.p_repost_pro_forest;
   }
 
   censorPosts(postIds: string[]): { censored_post_ids: string[]; censorship_actions_remaining: number } {
     const allowed = Math.max(0, this.censorshipActionsRemaining);
     const censored = this.posts.censorPosts(postIds, allowed);
     this.censorshipActionsRemaining = Math.max(0, this.censorshipActionsRemaining - censored.length);
+    for (const postId of censored) {
+      const post = this.posts.getPost(postId);
+      if (post === undefined) continue;
+      const recovery = this.params.debunk_influence_recovery;
+      const restoredInfluence = this.typeInfluence(post.type) * recovery;
+      for (const nodeId of post.seenBy) {
+        if (nodeId === post.creatorNode) continue;
+        this.nodeStates[nodeId] = Math.min(1, Math.max(0, this.nodeStates[nodeId] - restoredInfluence));
+      }
+    }
+    if (censored.length > 0) {
+      this.timeline[this.timeline.length - 1] = GameLogic.timeSeriesPoint(this.currentStep, this.nodeStates);
+    }
     return { censored_post_ids: censored, censorship_actions_remaining: this.censorshipActionsRemaining };
+  }
+
+  getLastPropagationEvents(): DayPropagationEvent[] {
+    return this.lastPropagationEvents;
   }
 
   step(): SnapshotResponse {
@@ -155,14 +143,17 @@ export class SimulationEngine {
       return this.getSummary();
     }
 
+    this.lastPropagationEvents = [];
+    const initialStates = [...this.nodeStates];
     this.nodeStates.forEach((state, nodeId) => {
       if (this.rng.random() <= this.params.p_generate_base) {
-        const postType = this.choosePostType(state, nodeId);
+        const postType = this.choosePostType(state);
         this.posts.createPost(postType, nodeId, this.currentStep);
       }
     });
 
     const stateDeltas = this.nodeStates.map(() => 0);
+    const propagationEvents: Array<Omit<DayPropagationEvent, 'target_state'> & { influence: number }> = [];
     for (const post of this.posts.activePosts()) {
       const currentEmitters = [...post.activeEmitters];
       post.activeEmitters.clear();
@@ -172,7 +163,15 @@ export class SimulationEngine {
         }
         for (const neighbor of this.graph.neighborsForPropagation(emitter)) {
           if (this.posts.markSeen(post.id, neighbor)) {
-            stateDeltas[neighbor] += this.typeInfluence(neighbor, post.type);
+            const influence = this.typeInfluence(post.type);
+            stateDeltas[neighbor] += influence;
+            propagationEvents.push({
+              post_id: post.id,
+              post_type: post.type,
+              source_node_id: emitter,
+              target_node_id: neighbor,
+              influence,
+            });
           }
         }
       }
@@ -206,6 +205,18 @@ export class SimulationEngine {
     }
 
     this.nodeStates = this.nodeStates.map((state, index) => Math.min(1, Math.max(0, state + stateDeltas[index])));
+    const visualStates = [...initialStates];
+    const lastEventByNode = new Map<number, number>();
+    const pendingEvents = propagationEvents.map(({ influence, ...event }, index) => {
+      const state = Math.min(1, Math.max(0, visualStates[event.target_node_id] + influence));
+      visualStates[event.target_node_id] = state;
+      lastEventByNode.set(event.target_node_id, index);
+      return { ...event, target_state: state };
+    });
+    this.lastPropagationEvents = pendingEvents;
+    for (const [nodeId, eventIndex] of lastEventByNode) {
+      this.lastPropagationEvents[eventIndex].target_state = this.nodeStates[nodeId];
+    }
     this.posts.advanceEmitters();
     this.currentStep += 1;
     this.censorshipActionsRemaining = this.params.max_censorship_actions_per_step;
@@ -213,17 +224,10 @@ export class SimulationEngine {
       GameLogic.timeSeriesPoint(
         this.currentStep,
         this.nodeStates,
-        this.params.center_tolerance,
-        this.centerTieBreaks,
       ),
     );
 
-    const evaluation = GameLogic.evaluate(
-      this.currentStep,
-      this.nodeStates,
-      this.params,
-      this.centerTieBreaks,
-    );
+    const evaluation = GameLogic.evaluate(this.currentStep, this.nodeStates, this.params);
     this.outcome = evaluation.outcome;
     this.message = evaluation.message;
 
@@ -238,11 +242,7 @@ export class SimulationEngine {
       nodes: this.nodeStates.map((state, nodeId) => ({
         id: nodeId,
         state,
-        classification: GameLogic.classifyState(
-          state,
-          this.params.center_tolerance,
-          this.centerTieBreaks[nodeId],
-        ),
+        classification: GameLogic.classifyState(state),
         posts_count: postsCreatedByNode[nodeId],
       })),
       edges: this.graph.edges().map(([source, target]) => ({ source, target })),
@@ -271,11 +271,7 @@ export class SimulationEngine {
   }
 
   getStatus(): StatusResponse {
-    const percentages = GameLogic.percentages(
-      this.nodeStates,
-      this.params.center_tolerance,
-      this.centerTieBreaks,
-    );
+    const percentages = GameLogic.percentages(this.nodeStates);
     return {
       current_step: this.currentStep,
       max_steps: this.params.election_step,

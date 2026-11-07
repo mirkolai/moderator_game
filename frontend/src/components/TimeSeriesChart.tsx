@@ -9,9 +9,8 @@ interface TimeSeriesChartProps {
 }
 
 const seriesConfig = [
-  { key: 'gamma', label: CATEGORY_CONFIG.gamma.label, color: CATEGORY_CONFIG.gamma.color },
-  { key: 'beta', label: CATEGORY_CONFIG.beta.label, color: CATEGORY_CONFIG.beta.color },
-  { key: 'alpha', label: CATEGORY_CONFIG.alpha.label, color: CATEGORY_CONFIG.alpha.color },
+  { key: 'pro_zoo', label: CATEGORY_CONFIG.pro_zoo.label, color: CATEGORY_CONFIG.pro_zoo.color },
+  { key: 'pro_forest', label: CATEGORY_CONFIG.pro_forest.label, color: CATEGORY_CONFIG.pro_forest.color },
 ] as const;
 
 export function TimeSeriesChart({ data }: TimeSeriesChartProps) {

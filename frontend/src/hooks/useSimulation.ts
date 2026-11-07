@@ -4,6 +4,7 @@ import { CATEGORY_CONFIG } from '../config/categories';
 import { SimulationEngine } from '../simulation/engine';
 import type {
   AppNotification,
+  DayAnimation,
   FeedResponse,
   GraphState,
   PostRecord,
@@ -38,9 +39,13 @@ export function useSimulation() {
   const [highlightedNodeIds, setHighlightedNodeIds] = useState<number[]>([]);
   const [highlightedPostId, setHighlightedPostId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [dayAnimation, setDayAnimation] = useState<DayAnimation | null>(null);
+  const [isDayAnimating, setIsDayAnimating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const selectedNodeIdRef = useRef<number | null>(null);
+  const isDayAnimatingRef = useRef(false);
+  const dayAnimationIdRef = useRef(0);
   const firstPostNotifiedRef = useRef(false);
   const firstEdgeRemovedNotifiedRef = useRef(false);
   const firstEdgeAddedNotifiedRef = useRef(false);
@@ -104,10 +109,9 @@ export function useSimulation() {
     hasInitializedRef.current = true;
 
     hydrate(() => engine.reset());
-    void stepSimulation();
     addNotification(
-      `Each node is an animal in the online community. Your mission is to keep ${CATEGORY_CONFIG.alpha.label} ahead before bulldozers arrive. The simulation is already running: inspect feeds, highlight influence, and moderate strategically.`,
-      1,
+      `Each node is an animal in the online community. Your mission is to keep ${CATEGORY_CONFIG.pro_forest.label} ahead until the last day. Once the first day begins, inspect feeds, highlight influence, and moderate strategically.`,
+      0,
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -145,14 +149,13 @@ export function useSimulation() {
   const censorPost = async (postId: string) => {
     try {
       const moderation = engine.censorPosts([postId]);
-      setStatus((current: StatusResponse | null) =>
-        current
-          ? {
-              ...current,
-              censorship_actions_remaining: moderation.censorship_actions_remaining,
-            }
-          : current,
-      );
+      const snapshot = engine.getSummary();
+      setGraph(snapshot.graph);
+      setTimeSeries(snapshot.time_series.series);
+      setStatus({
+        ...snapshot.status,
+        censorship_actions_remaining: moderation.censorship_actions_remaining,
+      });
       if (selectedNodeId !== null) {
         refreshSelectedFeed(selectedNodeId);
       }
@@ -161,10 +164,23 @@ export function useSimulation() {
     }
   };
 
-  const stepSimulation = async () => {
+  const stepSimulation = async (animate = true) => {
+    if (isDayAnimatingRef.current) return null;
+    const initialGraph = engine.getGraphState();
     const prevKeys = prevEdgeKeysRef.current;
     const snapshot = hydrate(() => engine.step());
     if (!snapshot) return null;
+    const events = engine.getLastPropagationEvents();
+    if (animate && events.length > 0) {
+      isDayAnimatingRef.current = true;
+      setIsDayAnimating(true);
+      setDayAnimation({
+        id: dayAnimationIdRef.current++,
+        initial_states: initialGraph.nodes.map((node) => node.state),
+        final_states: snapshot.graph.nodes.map((node) => node.state),
+        events,
+      });
+    }
 
     const currentStep = snapshot.status.current_step;
     const currentKeys = new Set(snapshot.graph.edges.map((e) => `${e.source}-${e.target}`));
@@ -203,7 +219,14 @@ export function useSimulation() {
     return snapshot;
   };
 
+  const finishDayAnimation = () => {
+    isDayAnimatingRef.current = false;
+    setIsDayAnimating(false);
+    setDayAnimation(null);
+  };
+
   const resetSimulation = async () => {
+    finishDayAnimation();
     selectedNodeIdRef.current = null;
     setSelectedNodeId(null);
     setFeed(null);
@@ -224,6 +247,7 @@ export function useSimulation() {
     warmUpSteps: number,
     days: string[][],
   ) => {
+    finishDayAnimation();
     selectedNodeIdRef.current = null;
     setSelectedNodeId(null);
     setFeed(null);
@@ -248,6 +272,7 @@ export function useSimulation() {
   };
 
   const loadLevel = async (levelParameters: SimulationParameters) => {
+    finishDayAnimation();
     selectedNodeIdRef.current = null;
     setSelectedNodeId(null);
     setFeed(null);
@@ -263,6 +288,7 @@ export function useSimulation() {
   };
 
   const updateParameters = async (nextParameters: SimulationParameters) => {
+    finishDayAnimation();
     selectedNodeIdRef.current = null;
     setSelectedNodeId(null);
     setFeed(null);
@@ -282,6 +308,8 @@ export function useSimulation() {
     highlightedNodeIds,
     highlightedPostId,
     loading,
+    dayAnimation,
+    isDayAnimating,
     error,
     notifications,
     addNotification,
@@ -290,6 +318,7 @@ export function useSimulation() {
     highlightInfluence,
     censorPost,
     stepSimulation,
+    finishDayAnimation,
     resetSimulation,
     loadLevel,
     replay,

@@ -1,6 +1,5 @@
-import alphaPostsCsv from './data/alphaPosts.csv?raw';
-import betaPostsCsv from './data/betaPosts.csv?raw';
-import gammaPostsCsv from './data/gammaPosts.csv?raw';
+import proForestPostsCsv from './data/proForestPosts.csv?raw';
+import proZooPostsCsv from './data/proZooPosts.csv?raw';
 import { extractPostContents } from './csvContent';
 import { CATEGORY_CONFIG } from '../config/categories';
 import type { Classification } from '../types';
@@ -12,27 +11,20 @@ export interface CategoryDefinition {
   postContents: string[];
 }
 
-// Ordered by opinion space: low -> center -> high. Labels come from the shared category config.
-export const CATEGORY_GAMMA: CategoryDefinition = {
-  key: 'gamma',
-  label: CATEGORY_CONFIG.gamma.label,
-  postContents: extractPostContents(gammaPostsCsv),
+// Labels and colors come from the shared category config.
+export const CATEGORY_PRO_ZOO: CategoryDefinition = {
+  key: 'pro_zoo',
+  label: CATEGORY_CONFIG.pro_zoo.label,
+  postContents: extractPostContents(proZooPostsCsv),
 };
 
-export const CATEGORY_BETA: CategoryDefinition = {
-  key: 'beta',
-  label: CATEGORY_CONFIG.beta.label,
-  postContents: extractPostContents(betaPostsCsv),
-};
-
-export const CATEGORY_ALPHA: CategoryDefinition = {
-  key: 'alpha',
-  label: CATEGORY_CONFIG.alpha.label,
-  postContents: extractPostContents(alphaPostsCsv),
+export const CATEGORY_PRO_FOREST: CategoryDefinition = {
+  key: 'pro_forest',
+  label: CATEGORY_CONFIG.pro_forest.label,
+  postContents: extractPostContents(proForestPostsCsv),
 };
 
 export const CATEGORY_BY_KEY: Record<Classification, CategoryDefinition> = {
-  alpha: CATEGORY_ALPHA,
-  beta: CATEGORY_BETA,
-  gamma: CATEGORY_GAMMA,
+  pro_forest: CATEGORY_PRO_FOREST,
+  pro_zoo: CATEGORY_PRO_ZOO,
 };

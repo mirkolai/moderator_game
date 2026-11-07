@@ -3,7 +3,7 @@ import * as d3 from 'd3';
 
 import { getAnimalImageForNode } from '../config/animals';
 import { CATEGORY_CONFIG, POST_HIGHLIGHT_COLORS } from '../config/categories';
-import type { EdgeDatum, GraphState, NodeDatum } from '../types';
+import type { DayAnimation, EdgeDatum, GraphState, NodeDatum } from '../types';
 
 // Fraction of the node radius occupied by the animal image.
 // This leaves a visible category-colored ring around the avatar.
@@ -11,11 +11,13 @@ const AVATAR_INSET = 0.82;
 
 interface NetworkGraphProps {
   graph: GraphState | null;
+  dayAnimation: DayAnimation | null;
   selectedNodeId: number | null;
   highlightedNodeIds: number[];
   isPostHighlighted: boolean;
   guideNodeIds?: number[];
   onSelectNode: (nodeId: number | null) => void;
+  onAnimationComplete: () => void;
 }
 
 const NO_GUIDE_NODES: number[] = [];
@@ -46,11 +48,13 @@ interface HoveredNode {
 
 export function NetworkGraph({
   graph,
+  dayAnimation,
   selectedNodeId,
   highlightedNodeIds,
   isPostHighlighted,
   guideNodeIds = NO_GUIDE_NODES,
   onSelectNode,
+  onAnimationComplete,
 }: NetworkGraphProps) {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const panelRef = useRef<HTMLElement | null>(null);
@@ -64,15 +68,11 @@ export function NetworkGraph({
   );
 
   const nodeColor = (node: SimNode): string => {
-    if (node.classification === 'gamma') {
-      return CATEGORY_CONFIG.gamma.color;
-    }
-
-    if (node.classification === 'alpha') {
-      return CATEGORY_CONFIG.alpha.color;
-    }
-
-    return CATEGORY_CONFIG.beta.color;
+    const centeredAlignment = node.state * 2 - 1;
+    const forestColorWeight = (centeredAlignment ** 3 + 1) / 2;
+    return d3.interpolateRgb(CATEGORY_CONFIG.pro_zoo.color, CATEGORY_CONFIG.pro_forest.color)(
+      forestColorWeight,
+    );
   };
 
   // ---------------------------------------------------------------------------
@@ -152,6 +152,9 @@ export function NetworkGraph({
   );
   const selectedNodeIdRef = useRef(selectedNodeId);
   selectedNodeIdRef.current = selectedNodeId;
+  const isAnimatingRef = useRef(false);
+  const onAnimationCompleteRef = useRef(onAnimationComplete);
+  onAnimationCompleteRef.current = onAnimationComplete;
 
   // ===========================================================================
   // EFFECT 1 — GRAPH / TOPOLOGY / SIMULATION
@@ -360,8 +363,15 @@ export function NetworkGraph({
       .join('g')
       .attr('class', 'nodes');
 
+    root
+      .selectAll<SVGGElement, null>('g.day-propagation-layer')
+      .data([null])
+      .join('g')
+      .attr('class', 'day-propagation-layer')
+      .style('pointer-events', 'none');
+
     svg.on('click', (event: MouseEvent) => {
-      if (event.target === svgRef.current) {
+      if (!isAnimatingRef.current && event.target === svgRef.current) {
         onSelectRef.current(null);
       }
     });
@@ -557,6 +567,7 @@ export function NetworkGraph({
 
     nodeSelection.on('click.node-select', (event, node) => {
       event.stopPropagation();
+      if (isAnimatingRef.current) return;
       onSelectRef.current(
         selectedNodeIdRef.current === node.id ? null : node.id,
       );
@@ -618,8 +629,13 @@ export function NetworkGraph({
         if (!event.active) {
           simRef.current?.alphaTarget(0);
         }
-        node.fx = null;
-        node.fy = null;
+        if (isAnimatingRef.current) {
+          node.fx = node.x;
+          node.fy = node.y;
+        } else {
+          node.fx = null;
+          node.fy = null;
+        }
       });
 
     nodeSelection.call(drag);
@@ -720,6 +736,135 @@ export function NetworkGraph({
       nodeSelection.select('image.node-avatar').interrupt();
     };
   }, [graph]);
+
+  useEffect(() => {
+    if (!dayAnimation || !svgRef.current) return;
+
+    let cancelled = false;
+    isAnimatingRef.current = true;
+    const svg = d3.select(svgRef.current);
+    const layer = svg.select<SVGGElement>('g.day-propagation-layer');
+    const nodeById = new Map(nodesRef.current.map((node) => [node.id, node]));
+    const circles = nodeSelRef.current?.select<SVGCircleElement>('circle.node-main');
+
+    for (const node of nodesRef.current) {
+      node.state = dayAnimation.initial_states[node.id] ?? node.state;
+    }
+    circles?.attr('fill', (node) => nodeColor(node));
+
+    let completedEvents = 0;
+    const eventCount = dayAnimation.events.length;
+    const shortestDuration = 800;
+    const longestDuration = 4_880;
+
+    const animateEvents = () => {
+      if (eventCount === 0) {
+        onAnimationCompleteRef.current();
+        return;
+      }
+
+      dayAnimation.events.forEach((event, index) => {
+        const source = nodeById.get(event.source_node_id);
+        const target = nodeById.get(event.target_node_id);
+        if (!source || !target) {
+          completedEvents += 1;
+          if (completedEvents === eventCount) onAnimationCompleteRef.current();
+          return;
+        }
+
+        const icon = layer
+          .append('g')
+          .attr('class', 'day-propagation-letter')
+          .attr('transform', `translate(${source.x ?? 0}, ${source.y ?? 0})`);
+        const letter = icon.append('g').attr('transform', 'translate(-10, -8)');
+        letter
+          .append('rect')
+          .attr('width', 20)
+          .attr('height', 16)
+          .attr('rx', 3)
+          .attr('fill', CATEGORY_CONFIG[event.post_type].color)
+          .attr('stroke', '#ffffff')
+          .attr('stroke-width', 1.5);
+        letter
+          .append('path')
+          .attr('d', 'M2,3 L10,9 L18,3')
+          .attr('fill', 'none')
+          .attr('stroke', '#ffffff')
+          .attr('stroke-width', 1.5)
+          .attr('stroke-linecap', 'round')
+          .attr('stroke-linejoin', 'round');
+
+        const duration = eventCount === 1
+          ? longestDuration
+          : shortestDuration + (index / (eventCount - 1)) * (longestDuration - shortestDuration);
+
+        icon
+          .transition()
+          .duration(duration)
+          .ease(d3.easeCubicInOut)
+          .attrTween('transform', () => (progress) => {
+            const x = (source.x ?? 0) + ((target.x ?? 0) - (source.x ?? 0)) * progress;
+            const y = (source.y ?? 0) + ((target.y ?? 0) - (source.y ?? 0)) * progress;
+            return `translate(${x}, ${y})`;
+          })
+          .on('end', () => {
+            icon.remove();
+            if (cancelled) return;
+            target.state = event.target_state;
+            const targetSelection = nodeSelRef.current
+              ?.filter((node) => node.id === target.id)
+            const targetCircle = targetSelection?.select<SVGCircleElement>('circle.node-main');
+            if (targetSelection && targetCircle && !targetCircle.empty()) {
+              const radius = Number(targetCircle.attr('r'));
+              targetSelection
+                .append('circle')
+                .attr('class', 'node-influence-pulse')
+                .attr('r', radius + 2)
+                .attr('fill', 'none')
+                .attr('stroke', CATEGORY_CONFIG[event.post_type].color)
+                .attr('stroke-width', 3)
+                .attr('opacity', 0.95)
+                .style('pointer-events', 'none')
+                .transition()
+                .duration(420)
+                .ease(d3.easeCubicOut)
+                .attr('r', radius + 11)
+                .attr('opacity', 0)
+                .on('end', function removePulse() {
+                  d3.select(this).remove();
+                });
+              targetCircle
+                .interrupt()
+                .transition()
+                .duration(180)
+                .attr('fill', nodeColor(target));
+            }
+            completedEvents += 1;
+            if (completedEvents === eventCount) {
+              for (const node of nodesRef.current) {
+                node.state = dayAnimation.final_states[node.id] ?? node.state;
+              }
+              nodeSelRef.current
+                ?.select<SVGCircleElement>('circle.node-main')
+                .attr('fill', (node) => nodeColor(node));
+              for (const node of nodesRef.current) {
+                node.fx = null;
+                node.fy = null;
+              }
+              onAnimationCompleteRef.current();
+            }
+          });
+      });
+    };
+
+    animateEvents();
+
+    return () => {
+      cancelled = true;
+      isAnimatingRef.current = false;
+      layer.selectAll('*').interrupt().remove();
+    };
+  }, [dayAnimation]);
 
   // ===========================================================================
   // EFFECT 2 — SELECTION / HIGHLIGHT
@@ -848,13 +993,12 @@ export function NetworkGraph({
             <span style={{ left: `${hoveredNode.node.state * 100}%` }} />
           </div>
           <div className="node-hover-card__alignment-labels" aria-hidden="true">
-            <span>{CATEGORY_CONFIG.gamma.label}</span>
-            <span>{CATEGORY_CONFIG.beta.label}</span>
-            <span>{CATEGORY_CONFIG.alpha.label}</span>
+            <span style={{ color: CATEGORY_CONFIG.pro_zoo.color }}>{CATEGORY_CONFIG.pro_zoo.label}</span>
+            <span style={{ color: CATEGORY_CONFIG.pro_forest.color }}>{CATEGORY_CONFIG.pro_forest.label}</span>
           </div>
           <div className="node-hover-card__stats">
             <span>{hoveredNode.friendCount} {hoveredNode.friendCount === 1 ? 'friend' : 'friends'}</span>
-            <span>{hoveredNode.node.posts_count} {hoveredNode.node.posts_count === 1 ? 'post' : 'posts'} posted</span>
+            <span>{hoveredNode.node.posts_count} {hoveredNode.node.posts_count === 1 ? 'post' : 'posts'}</span>
           </div>
         </div>
       ) : null}

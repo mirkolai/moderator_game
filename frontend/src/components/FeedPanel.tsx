@@ -12,6 +12,7 @@ interface FeedPanelProps {
   highlightedPostId: string | null;
   currentStep: number;
   censorshipActionsRemaining: number;
+  interactionDisabled: boolean;
   onHighlightPost: (post: PostRecord) => void;
   onCensorPost: (postId: string) => void;
 }
@@ -24,6 +25,7 @@ export function FeedPanel({
   highlightedPostId,
   currentStep,
   censorshipActionsRemaining,
+  interactionDisabled,
   onHighlightPost,
   onCensorPost,
 }: FeedPanelProps) {
@@ -112,9 +114,8 @@ export function FeedPanel({
                     />
                   </div>
                   <div className="feed-panel__alignment-labels">
-                    <span style={{ color: CATEGORY_CONFIG.gamma.color }}>{CATEGORY_CONFIG.gamma.label}</span>
-                    <span style={{ color: CATEGORY_CONFIG.beta.color }}>{CATEGORY_CONFIG.beta.label}</span>
-                    <span style={{ color: CATEGORY_CONFIG.alpha.color }}>{CATEGORY_CONFIG.alpha.label}</span>
+                    <span style={{ color: CATEGORY_CONFIG.pro_zoo.color }}>{CATEGORY_CONFIG.pro_zoo.label}</span>
+                    <span style={{ color: CATEGORY_CONFIG.pro_forest.color }}>{CATEGORY_CONFIG.pro_forest.label}</span>
                   </div>
                 </div>
               </>
@@ -147,7 +148,9 @@ export function FeedPanel({
               <article
                 key={post.id}
                 className={`post-card ${post.category} ${isCensored ? 'is-censored' : ''} ${isActiveHighlight ? 'is-highlighted' : ''}`}
-                onClick={() => onHighlightPost(post)}
+                onClick={() => {
+                  if (!interactionDisabled) onHighlightPost(post);
+                }}
               >
                 <div className="post-card__top">
                   <img
@@ -191,7 +194,7 @@ export function FeedPanel({
                   <button
                     type="button"
                     className="ghost-button"
-                    disabled={isCensored || censorshipActionsRemaining <= 0}
+                    disabled={interactionDisabled || isCensored || censorshipActionsRemaining <= 0}
                     onClick={(event: MouseEvent<HTMLButtonElement>) => {
                       event.stopPropagation();
                       onCensorPost(post.id);
@@ -201,7 +204,11 @@ export function FeedPanel({
                   </button>
                   {isCensored ? (
                     <p className="post-card__moderation-note">
-                      <strong>The claim has been fact-checked and found to be false.</strong>
+                      <strong>
+                        {post.category === 'pro_forest'
+                          ? 'The post was removed, but it was legitimate.'
+                          : 'The claim has been fact-checked and found to be false.'}
+                      </strong>
                     </p>
                   ) : null}
                 </div>

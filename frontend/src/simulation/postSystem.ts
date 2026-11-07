@@ -27,11 +27,10 @@ export class PostSystem {
 
   private nextId = 1;
   private readonly rng: Rng;
-  private readonly contentBagByType: Record<Classification, string[]> = { alpha: [], beta: [], gamma: [] };
+  private readonly contentBagByType: Record<Classification, string[]> = { pro_forest: [], pro_zoo: [] };
   private readonly lastContentByType: Record<Classification, string | null> = {
-    alpha: null,
-    beta: null,
-    gamma: null,
+    pro_forest: null,
+    pro_zoo: null,
   };
 
   constructor(rng: Rng) {
@@ -51,7 +50,7 @@ export class PostSystem {
     }
 
     if (bag.length === 0) {
-      return `${postType[0].toUpperCase()}${postType.slice(1)} content`;
+      return `${CATEGORY_BY_KEY[postType].label} content`;
     }
 
     const nextContentValue = bag.pop()!;

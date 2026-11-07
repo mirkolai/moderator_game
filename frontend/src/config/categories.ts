@@ -1,4 +1,4 @@
-export type CategoryKey = 'alpha' | 'beta' | 'gamma';
+export type CategoryKey = 'pro_forest' | 'pro_zoo';
 
 export interface CategoryConfigEntry {
   key: CategoryKey;
@@ -9,29 +9,23 @@ export interface CategoryConfigEntry {
 
 // Centralized category mapping. Change labels/colors here to re-theme categories.
 export const CATEGORY_CONFIG: Record<CategoryKey, CategoryConfigEntry> = {
-  alpha: {
-    key: 'alpha',
+  pro_forest: {
+    key: 'pro_forest',
     label: 'Pro Forest',
-    cssToken: 'alpha',
-    color: '#009e73',
+    cssToken: 'pro-forest',
+    color: '#7fc97f',
   },
-  beta: {
-    key: 'beta',
-    label: 'Undecided',
-    cssToken: 'beta',
-    color: '#56b4e9',
-  },
-  gamma: {
-    key: 'gamma',
+  pro_zoo: {
+    key: 'pro_zoo',
     label: 'Pro Zoo',
-    cssToken: 'gamma',
-    color: '#cc79A7',
+    cssToken: 'pro-zoo',
+    color: '#beaed4',
   },
 };
 
-export const CATEGORY_ORDER: CategoryKey[] = ['gamma', 'beta', 'alpha'];
+export const CATEGORY_ORDER: CategoryKey[] = ['pro_zoo', 'pro_forest'];
 export const POST_HIGHLIGHT_COLORS = {
-  seenBy: '#D55E00',
-  potentialRecipients: '#D55E00',
+  seenBy: '#fdc086',
+  potentialRecipients: '#fdc086',
   selectedNode: '#f0e442',
 };

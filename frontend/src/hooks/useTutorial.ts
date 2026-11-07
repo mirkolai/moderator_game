@@ -94,14 +94,14 @@ export function useTutorial(sim: TutorialSimulation) {
 
     const isRight = postId === current.rightPostId;
     const recipients = potentialRecipients(graphBefore, rightPost);
-    const wasZoo = new Set(graphBefore.nodes.filter((n) => n.classification === 'gamma').map((n) => n.id));
+    const wasZoo = new Set(graphBefore.nodes.filter((n) => n.classification === 'pro_zoo').map((n) => n.id));
 
     await sim.censorPost(postId);
     const snapshot = await sim.stepSimulation();
     if (!snapshot) return;
 
     const turnedZoo = recipients.filter(
-      (id) => !wasZoo.has(id) && snapshot.graph.nodes[id]?.classification === 'gamma',
+      (id) => !wasZoo.has(id) && snapshot.graph.nodes[id]?.classification === 'pro_zoo',
     );
     setFlippedNodeIds(turnedZoo);
     setHint(null);

@@ -35,6 +35,8 @@ export default function App() {
     highlightedNodeIds,
     highlightedPostId,
     loading,
+    dayAnimation,
+    isDayAnimating,
     error,
     notifications,
     markAllRead,
@@ -42,6 +44,7 @@ export default function App() {
     highlightInfluence,
     censorPost,
     stepSimulation,
+    finishDayAnimation,
     resetSimulation,
     loadLevel,
     replay,
@@ -70,7 +73,7 @@ export default function App() {
     }
   };
 
-  const missionDescription = `Mission: keep ${CATEGORY_CONFIG.alpha.label} ahead before bulldozers arrive.`;
+  const missionDescription = `Mission: keep ${CATEGORY_CONFIG.pro_forest.label} ahead until the last day.`;
   const currentStep = status?.current_step ?? 0;
   const maxSteps = status?.max_steps ?? parameters?.election_step ?? 0;
   const daysToElection = Math.max(0, maxSteps - currentStep);
@@ -83,7 +86,7 @@ export default function App() {
 
   // Auto-step when moderation actions run out during gameplay
   useEffect(() => {
-    if (isTutorial || !hasGameStarted || !isGameRunning || loading) {
+    if (isTutorial || !hasGameStarted || !isGameRunning || loading || isDayAnimating) {
       prevModerationActionsRef.current = moderationActionsRemaining;
       return;
     }
@@ -98,10 +101,10 @@ export default function App() {
     }
 
     prevModerationActionsRef.current = moderationActionsRemaining;
-  }, [isTutorial, moderationActionsRemaining, hasGameStarted, isGameRunning, loading, stepSimulation]);
+  }, [isTutorial, moderationActionsRemaining, hasGameStarted, isGameRunning, loading, isDayAnimating, stepSimulation]);
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${isDayAnimating ? 'is-day-animating' : ''}`} aria-busy={isDayAnimating}>
       <header className="topbar">
         <div>
           <p className="eyebrow">Moderator Simulation</p>
@@ -187,7 +190,10 @@ export default function App() {
             <button
               type="button"
               className="primary-button"
-              onClick={() => setIsWelcomeOpen(false)}
+              onClick={() => {
+                setIsWelcomeOpen(false);
+                void stepSimulation();
+              }}
             >
               Enter Simulation
             </button>
@@ -201,7 +207,7 @@ export default function App() {
               className={`level-tab ${isTutorial ? 'is-active' : ''}`}
               aria-pressed={isTutorial}
               title="A guided walkthrough of the game"
-              disabled={loading}
+              disabled={loading || isDayAnimating}
               onClick={() => selectTab('tutorial')}
             >
               Tutorial
@@ -213,7 +219,7 @@ export default function App() {
                 className={`level-tab ${id === activeTab ? 'is-active' : ''}`}
                 aria-pressed={id === activeTab}
                 title={LEVELS[id].description}
-                disabled={loading}
+                disabled={loading || isDayAnimating}
                 onClick={() => selectTab(id)}
               >
                 {LEVELS[id].label}
@@ -231,7 +237,7 @@ export default function App() {
               flippedCount={tutorial.flippedNodeIds.length}
               winImage={youWinImage}
               loseImage={youLoseImage}
-              disabled={loading}
+              disabled={loading || isDayAnimating}
               onNext={tutorial.next}
               onRewind={tutorial.rewind}
               onFinish={() => selectTab(DEFAULT_LEVEL)}
@@ -241,12 +247,12 @@ export default function App() {
           <section className="status-strip">
             <div className="status-card card">
               <span>Countdown</span>
-              <strong>{daysToElection+1} days to bulldozers arrive</strong>
+              <strong>{daysToElection} days to bulldozers arrive</strong>
               <div className="status-card__actions">
                 <button
                   type="button"
                   className="ghost-button status-card__skip"
-                  disabled={loading || !isGameRunning || isTutorial}
+                  disabled={loading || isDayAnimating || !isGameRunning || isTutorial}
                   onClick={() => void stepSimulation()}
                 >
                   Skip to next day
@@ -256,43 +262,30 @@ export default function App() {
             </div>
             <div className="status-card card">
               <div className="status-stack">
-                <div className="status-bar-row gamma-row row align-items-center gx-3">
+                <div className="status-bar-row pro-zoo-row row align-items-center gx-3">
                   <div className="col-8">
                     <div className="status-bar-track">
-                      <div className="status-bar-fill gamma-fill" style={{ width: toPercent(status?.percentages.gamma) }} />
+                      <div className="status-bar-fill pro-zoo-fill" style={{ width: toPercent(status?.percentages.pro_zoo) }} />
                     </div>
                   </div>
                   <div className="col-2">
-                    <strong>{toPercent(status?.percentages.gamma)}</strong>
+                    <strong>{toPercent(status?.percentages.pro_zoo)}</strong>
                   </div>
                   <div className="col-2">
-                    <span style={{ color: CATEGORY_CONFIG.gamma.color }}>{CATEGORY_CONFIG.gamma.label}</span>
+                    <span style={{ color: CATEGORY_CONFIG.pro_zoo.color }}>{CATEGORY_CONFIG.pro_zoo.label}</span>
                   </div>
                 </div>
-                <div className="status-bar-row beta-row row align-items-center gx-3">
+                <div className="status-bar-row pro-forest-row row align-items-center gx-3">
                   <div className="col-8">
                     <div className="status-bar-track">
-                      <div className="status-bar-fill beta-fill" style={{ width: toPercent(status?.percentages.beta) }} />
+                      <div className="status-bar-fill pro-forest-fill" style={{ width: toPercent(status?.percentages.pro_forest) }} />
                     </div>
                   </div>
                   <div className="col-2">
-                    <strong>{toPercent(status?.percentages.beta)}</strong>
+                    <strong>{toPercent(status?.percentages.pro_forest)}</strong>
                   </div>
                   <div className="col-2">
-                    <span style={{ color: CATEGORY_CONFIG.beta.color }}>{CATEGORY_CONFIG.beta.label}</span>
-                  </div>
-                </div>
-                <div className="status-bar-row alpha-row row align-items-center gx-3">
-                  <div className="col-8">
-                    <div className="status-bar-track">
-                      <div className="status-bar-fill alpha-fill" style={{ width: toPercent(status?.percentages.alpha) }} />
-                    </div>
-                  </div>
-                  <div className="col-2">
-                    <strong>{toPercent(status?.percentages.alpha)}</strong>
-                  </div>
-                  <div className="col-2">
-                    <span style={{ color: CATEGORY_CONFIG.alpha.color }}>{CATEGORY_CONFIG.alpha.label}</span>
+                    <span style={{ color: CATEGORY_CONFIG.pro_forest.color }}>{CATEGORY_CONFIG.pro_forest.label}</span>
                   </div>
                 </div>
               </div>
@@ -320,7 +313,7 @@ export default function App() {
                 className={`parameter-dock ${isParameterPanelOpen ? 'is-open' : 'is-closed'}`}
                 aria-hidden={!isParameterPanelOpen}
               >
-                <ParameterPanel parameters={parameters} disabled={loading} onApply={updateParameters} />
+                <ParameterPanel parameters={parameters} disabled={loading || isDayAnimating} onApply={updateParameters} />
               </aside>
             ) : null}
 
@@ -328,10 +321,12 @@ export default function App() {
               <div className="visual-row">
                 <NetworkGraph
                   graph={graph}
+                  dayAnimation={dayAnimation}
                   selectedNodeId={selectedNodeId}
                   highlightedNodeIds={highlightedNodeIds}
                   isPostHighlighted={highlightedPostId !== null}
                   guideNodeIds={isTutorial ? tutorial.guideNodeIds : undefined}
+                  onAnimationComplete={finishDayAnimation}
                   onSelectNode={(nodeId) =>
                     isTutorial ? tutorial.onSelectNode(nodeId) : void selectNode(nodeId)
                   }
@@ -344,6 +339,7 @@ export default function App() {
                   highlightedPostId={highlightedPostId}
                   currentStep={currentStep}
                   censorshipActionsRemaining={status?.censorship_actions_remaining ?? 0}
+                  interactionDisabled={isDayAnimating}
                   onHighlightPost={(post) =>
                     isTutorial ? tutorial.onHighlightPost(post) : void highlightInfluence(post)
                   }
@@ -360,7 +356,7 @@ export default function App() {
         </>
       )}
 
-      {!isWelcomeOpen && isGameFinished ? (
+      {!isWelcomeOpen && isGameFinished && !isDayAnimating ? (
         <div className="endgame-overlay" role="dialog" aria-modal="true" aria-live="polite">
           <div className="endgame-card card">
             <p className="eyebrow">Match Result</p>
@@ -372,7 +368,7 @@ export default function App() {
             <button
               type="button"
               className="primary-button"
-              disabled={loading}
+              disabled={loading || isDayAnimating}
               onClick={() => {
                 void (async () => {
                   await resetSimulation();
@@ -389,6 +385,14 @@ export default function App() {
 
       {!isWelcomeOpen && isInstructionsOpen ? (
         <InstructionsOverlay onClose={() => setIsInstructionsOpen(false)} />
+      ) : null}
+      {isDayAnimating ? (
+        <>
+          <div className="day-animation-blocker" aria-hidden="true" />
+          <div className="day-animation-status" role="status" aria-live="polite">
+            Messages spreading — {dayAnimation?.events.length ?? 0} transmissions in 5 seconds. Drag and zoom the graph.
+          </div>
+        </>
       ) : null}
     </div>
   );
